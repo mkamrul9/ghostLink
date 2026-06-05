@@ -13,9 +13,8 @@ export default class SpeedGraph extends Component {
     template() {
         // The canvas element must have explicit width and height attributes
         return `
-      <div class="graph-container" style="background: #111; padding: 10px; border-radius: 8px; border: 1px solid #333;">
-        <h3 style="color: #00ffcc; margin-top: 0; font-family: monospace;">NETWORK THROUGHPUT</h3>
-        <canvas id="speedCanvas" width="600" height="150" style="display: block; width: 100%;"></canvas>
+            <div class="graph-container">
+                <canvas id="speedCanvas" width="600" height="150" class="graph-canvas"></canvas>
       </div>
     `;
     }

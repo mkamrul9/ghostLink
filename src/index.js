@@ -1,6 +1,8 @@
 import Store from './store/Store.js';
 import DropZone from './components/ui/DropZone.js';
-import Component from './components/Component.js';
+import DashboardShell from './components/ui/DashboardShell.js';
+import FileTree from './components/ui/FileTree.js';
+import TransferQueue from './components/ui/TransferQueue.js';
 import { createChunkGenerator } from './helpers/FileChunker.js';
 import WorkerManager from './worker/WorkerManager.js';
 import DBManager from './DB/DBManager.js';
@@ -13,35 +15,59 @@ import WebRTCConnection from './utils/WebRTCConnection.js';
 import SpeedGraph from './components/ui/SpeedGraph.js';
 
 const globalStore = new Store({
-    initialState: { files: [] }
+    initialState: {
+        files: [],
+        transfers: [],
+        chat: [],
+        ui: {
+            view: 'dashboard',
+            connectionStatus: 'idle'
+        },
+        session: {
+            roomId: 'ghostlink-room-42',
+            role: 'receiver',
+            peers: 0
+        }
+    }
 });
 
-// A simple component to show the parsed files
-class FileTree extends Component {
-    template() {
-        const files = this.props.store.state.files;
-        if (files.length === 0) return `<p>No files selected.</p>`;
+const addTransfer = (transfer) => {
+    const current = globalStore.state.transfers || [];
+    globalStore.state.transfers = [...current, transfer];
+};
 
-        const listItems = files.map(f => `<li>${f.fullPath} (${(f.size / 1024).toFixed(2)} KB)</li>`).join('');
-        return `<ul>${listItems}</ul>`;
-    }
-}
+const updateTransfer = (id, patch) => {
+    const current = globalStore.state.transfers || [];
+    const next = current.map((item) => (item.id === id ? { ...item, ...patch } : item));
+    globalStore.state.transfers = next;
+};
+// Mount the dashboard shell and UI widgets
+const appRoot = document.getElementById('app');
+const shell = new DashboardShell();
+shell.mount(appRoot);
 
-// Mount everything
+const dropZoneMount = document.getElementById('drop-zone-slot');
+const fileTreeMount = document.getElementById('file-tree-slot');
+const speedGraphMount = document.getElementById('speed-graph-slot');
+const queueMount = document.getElementById('queue-slot');
+
 const dropZone = new DropZone({ store: globalStore });
-dropZone.mount(document.getElementById('app'));
+dropZone.mount(dropZoneMount);
 
 const fileTree = new FileTree({ store: globalStore });
-fileTree.mount(document.getElementById('app'));
+fileTree.mount(fileTreeMount);
+
+const transferQueue = new TransferQueue({ store: globalStore });
+transferQueue.mount(queueMount);
 
 // Mount the throughput graph and expose it globally for reporting
 const speedGraph = new SpeedGraph({ store: globalStore });
-speedGraph.mount(document.getElementById('app'));
+speedGraph.mount(speedGraphMount);
 window.speedGraph = speedGraph;
 
 // Debug helpers: expose store and log mount status so you can diagnose in DevTools
 window.globalStore = globalStore;
-console.log('App mounted: dropZone and fileTree. Inspect `window.globalStore` to test updates.');
+console.log('App mounted: dashboard shell, drop zone, file tree, and speed graph.');
 
 // Worker manager for off-main-thread chunk processing
 const workerBoss = new WorkerManager();
@@ -123,6 +149,17 @@ async function initP2P() {
             // Receiver gets file metadata + raw key from sender via signaling
             case 'FILE_META':
                 console.log('[FILE_META] received, isInitiator:', isInitiator, msg.fileName);
+                addTransfer({
+                    id: msg.fileId,
+                    name: msg.fileName,
+                    size: msg.fileSize || null,
+                    progress: 0,
+                    speed: 0,
+                    status: 'receiving',
+                    direction: 'receive',
+                    totalChunks: msg.totalChunks,
+                    startedAt: Date.now()
+                });
                 // The server never echoes back to the sender, so receiving FILE_META
                 // always means this tab is the receiver — no isInitiator guard needed.
                 try {
@@ -132,7 +169,25 @@ async function initP2P() {
                         cryptoKey,
                         msg.totalChunks,
                         msg.fileName,
-                        msg.mimeType || 'application/octet-stream'
+                        msg.mimeType || 'application/octet-stream',
+                        {
+                            onProgress: (progress, stats) => {
+                                updateTransfer(msg.fileId, {
+                                    progress,
+                                    status: 'receiving',
+                                    speed: stats.speed || 0,
+                                    receivedChunks: stats.receivedChunks
+                                });
+                            },
+                            onComplete: () => {
+                                updateTransfer(msg.fileId, {
+                                    progress: 100,
+                                    status: 'complete',
+                                    speed: 0,
+                                    completedAt: Date.now()
+                                });
+                            }
+                        }
                     );
                     window.webrtc = webrtc;
                     console.log(`✅ FileReceiver ready for "${msg.fileName}" (${msg.totalChunks} chunks)`);
@@ -162,6 +217,19 @@ async function initP2P() {
         for (const file of files) {
             const fileId = Date.now(); // Simple unique ID
             const mimeType = file.type || 'application/octet-stream';
+            const totalChunks = Math.ceil(file.size / (64 * 1024));
+
+            addTransfer({
+                id: fileId,
+                name: file.name,
+                size: file.size,
+                progress: 0,
+                speed: 0,
+                status: 'sending',
+                direction: 'send',
+                totalChunks,
+                startedAt: Date.now()
+            });
 
             // 1. Generate a fresh AES-256-GCM key for this file
             const cryptoKey = await generateEncryptionKey();
@@ -169,16 +237,14 @@ async function initP2P() {
             // 2. Export the raw key bytes so we can send them to the receiver via signaling
             const rawKey = await crypto.subtle.exportKey('raw', cryptoKey);
 
-            // 3. Count total chunks
-            const totalChunks = Math.ceil(file.size / (64 * 1024));
-
-            // 4. Send file metadata + raw key to the receiver via signaling BEFORE streaming
+            // 3. Send file metadata + raw key to the receiver via signaling BEFORE streaming
             signal.send({
                 type: 'FILE_META',
                 fileId,
                 fileName: file.name,
                 mimeType,
                 totalChunks,
+                fileSize: file.size,
                 rawKey: Array.from(new Uint8Array(rawKey))
             });
             console.log(`Sent FILE_META for "${file.name}" (${totalChunks} chunks)`);
@@ -190,11 +256,24 @@ async function initP2P() {
             async function* encryptedPacketGenerator() {
                 const chunkGen = createChunkGenerator(file);
                 let chunkIndex = 0;
+                let bytesSinceTick = 0;
+                let lastTick = typeof performance !== 'undefined' ? performance.now() : Date.now();
                 for await (const { buffer } of chunkGen) {
                     const { iv, encryptedBuffer } = await encryptChunk(cryptoKey, buffer);
                     const packet = packEncryptedChunk(fileId, chunkIndex, iv, encryptedBuffer);
-                    yield packet;
                     chunkIndex++;
+                    bytesSinceTick += buffer.byteLength;
+                    const progress = Math.round((chunkIndex / totalChunks) * 100);
+                    updateTransfer(fileId, { progress, status: 'sending' });
+
+                    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                    if (now - lastTick >= 1000) {
+                        const speed = Math.round((bytesSinceTick * 1000) / (now - lastTick));
+                        updateTransfer(fileId, { speed });
+                        bytesSinceTick = 0;
+                        lastTick = now;
+                    }
+                    yield packet;
                 }
             }
 
@@ -203,6 +282,12 @@ async function initP2P() {
             const streamer = new FileStreamer(webrtc.dataChannel);
             await streamer.stream(encryptedPacketGenerator());
             console.log(`Done streaming "${file.name}"`);
+            updateTransfer(fileId, {
+                progress: 100,
+                status: 'complete',
+                speed: 0,
+                completedAt: Date.now()
+            });
         }
     };
 }

@@ -21,11 +21,19 @@ setInterval(() => {
 }, 1000);
 
 export default class FileReceiver {
-    constructor(cryptoKey, expectedTotalChunks, fileName, mimeType) {
+    constructor(cryptoKey, expectedTotalChunks, fileName, mimeType, options = {}) {
         this.cryptoKey = cryptoKey;
         this.expectedTotalChunks = expectedTotalChunks;
         this.fileName = fileName;
         this.mimeType = mimeType;
+
+        this.onProgress = options.onProgress || null;
+        this.onComplete = options.onComplete || null;
+        this.onError = options.onError || null;
+        this.onSpeed = options.onSpeed || null;
+        this.bytesSinceLastTick = 0;
+        this.lastSpeedTs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        this.currentSpeed = 0;
 
         // Using a Map prevents memory leaks from out-of-order array indexing
         this.receivedChunks = new Map();
@@ -53,6 +61,25 @@ export default class FileReceiver {
                 const progress = Math.round((this.chunksReceivedCount / this.expectedTotalChunks) * 100);
                 console.log(`Download Progress: ${progress}%`);
 
+                const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                this.bytesSinceLastTick += decryptedBuffer.byteLength;
+                if (now - this.lastSpeedTs >= 1000) {
+                    this.currentSpeed = Math.round((this.bytesSinceLastTick * 1000) / (now - this.lastSpeedTs));
+                    this.bytesSinceLastTick = 0;
+                    this.lastSpeedTs = now;
+                    if (typeof this.onSpeed === 'function') {
+                        this.onSpeed(this.currentSpeed);
+                    }
+                }
+
+                if (typeof this.onProgress === 'function') {
+                    this.onProgress(progress, {
+                        receivedChunks: this.chunksReceivedCount,
+                        totalChunks: this.expectedTotalChunks,
+                        speed: this.currentSpeed
+                    });
+                }
+
                 // 4. Check if we have everything
                 if (this.chunksReceivedCount === this.expectedTotalChunks) {
                     this.assembleFile();
@@ -69,6 +96,9 @@ export default class FileReceiver {
             }
         } catch (error) {
             console.error('Failed to process incoming packet. Key mismatch or corrupted data.', error);
+            if (typeof this.onError === 'function') {
+                this.onError(error);
+            }
         }
     }
 
@@ -91,6 +121,9 @@ export default class FileReceiver {
         this.receivedChunks.clear();
 
         this.triggerDownload(fileBlob);
+        if (typeof this.onComplete === 'function') {
+            this.onComplete();
+        }
     }
 
     /**

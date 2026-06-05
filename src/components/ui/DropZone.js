@@ -10,9 +10,16 @@ export default class DropZone extends Component {
         const dragClass = this.state.isDragging ? 'drop-zone active-drag' : 'drop-zone';
 
         return `
-      <div class="${dragClass}" style="border: 2px dashed #ccc; padding: 50px; text-align: center; transition: 0.3s;">
-        <h2>Drag & Drop Files or Folders Here</h2>
-        <p>GhostLink will automatically parse your folder structure.</p>
+            <div class="${dragClass}">
+                <div class="drop-zone__inner">
+                    <h2>Drag & Drop Files or Folders Here</h2>
+                    <p>GhostLink will automatically parse your folder structure.</p>
+                    <div class="drop-zone__cta">
+                        <span class="tag">Encrypted</span>
+                        <span class="tag">Chunked</span>
+                        <span class="tag">P2P</span>
+                    </div>
+                </div>
       </div>
     `;
     }
