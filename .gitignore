@@ -1,2 +1,4 @@
 docs
 commands.txt
+node_modules
+dist
