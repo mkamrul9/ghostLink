@@ -13,13 +13,17 @@ export default class DashboardShell extends Component {
             </div>
           </div>
           <div class="header-actions">
-            <span class="status-pill">Status: Idle</span>
-            <button class="btn btn-primary">New Session</button>
+            <div id="session-status-slot"></div>
           </div>
         </header>
 
         <div class="app-body">
           <aside class="app-sidebar">
+            <section class="panel session-panel">
+              <div class="panel-title">Session Controls</div>
+              <div id="session-controls-slot"></div>
+            </section>
+
             <section class="panel nav-panel">
               <div class="panel-title">Navigation</div>
               <nav class="nav-list">
@@ -32,24 +36,12 @@ export default class DashboardShell extends Component {
 
             <section class="panel stats-panel">
               <div class="panel-title">Session</div>
-              <div class="stat-grid">
-                <div class="stat">
-                  <span class="stat-label">Room</span>
-                  <span class="stat-value">ghostlink-room-42</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Role</span>
-                  <span class="stat-value">Receiver</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Peers</span>
-                  <span class="stat-value">0</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Encrypted</span>
-                  <span class="stat-value">AES-256-GCM</span>
-                </div>
-              </div>
+              <div id="session-summary-slot"></div>
+            </section>
+
+            <section class="panel connections-panel">
+              <div class="panel-title">Connections</div>
+              <div id="connections-slot"></div>
             </section>
           </aside>
 
@@ -76,12 +68,17 @@ export default class DashboardShell extends Component {
               <div id="file-tree-slot"></div>
             </section>
 
+            <section class="panel chat-shell">
+              <div class="panel-title">P2P Chat</div>
+              <div id="chat-slot"></div>
+            </section>
+
             <section class="panel help-panel">
               <div class="panel-title">Quick Tips</div>
               <ul class="tips-list">
-                <li>Open two tabs to connect peers.</li>
-                <li>Sender uses ?init=true in the URL.</li>
-                <li>Drop folders to preserve structure.</li>
+                <li>Create a room and share the invite link.</li>
+                <li>Both peers can send and receive files.</li>
+                <li>History lives in your browser vault.</li>
               </ul>
             </section>
           </aside>

@@ -48,4 +48,15 @@ export default class SignalingChannel {
             console.warn('Cannot send message, WebSocket is not open.');
         }
     }
+
+    // Closes the WebSocket connection cleanly
+    close() {
+        if (this.socket) {
+            try {
+                this.socket.close();
+            } catch (e) {
+                // ignore close errors
+            }
+        }
+    }
 }

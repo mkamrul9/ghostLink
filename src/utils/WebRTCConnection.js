@@ -47,6 +47,9 @@ export default class WebRTCConnection {
             if (this.peerConnection.connectionState === 'connected') {
                 console.log('🎉 P2P CONNECTION ESTABLISHED DIRECTLY!');
             }
+            if (typeof this.onConnectionStateChange === 'function') {
+                this.onConnectionStateChange(this.peerConnection.connectionState);
+            }
         };
 
         // NEW: More granular ICE state changes for debugging
@@ -64,6 +67,9 @@ export default class WebRTCConnection {
 
         this.dataChannel.onopen = () => {
             console.log('🟢 RTCDataChannel OPEN! Ready to stream binary.');
+            if (typeof this.onDataChannelOpen === 'function') {
+                this.onDataChannelOpen();
+            }
 
             // Expose simple helpers for manual testing from DevTools:
             // - startStreaming(packetGenerator): streams an async generator over the data channel
@@ -93,6 +99,9 @@ export default class WebRTCConnection {
 
         this.dataChannel.onclose = () => {
             console.log('🔴 RTCDataChannel CLOSED.');
+            if (typeof this.onDataChannelClose === 'function') {
+                this.onDataChannelClose();
+            }
         };
 
         this.dataChannel.onmessage = (event) => {
@@ -100,6 +109,14 @@ export default class WebRTCConnection {
             if (typeof event.data === 'string') {
                 try {
                     const msg = JSON.parse(event.data);
+                    if (msg.type === 'CHAT') {
+                        if (typeof this.onChatMessage === 'function') {
+                            this.onChatMessage(msg);
+                        } else {
+                            console.log('Chat message:', msg);
+                        }
+                        return;
+                    }
                     console.log('DataChannel control message:', msg);
                     if (msg.type === 'PING') {
                         // reply with PONG
@@ -128,6 +145,35 @@ export default class WebRTCConnection {
                 console.warn('Binary packet received but no FileReceiver attached.', event.data);
             }
         };
+    }
+
+    /**
+     * Sends a chat message over the data channel.
+     * @param {{id:number,text:string,ts:number,author?:string}} message
+     */
+    sendChat(message) {
+        if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+            throw new Error('DataChannel is not open.');
+        }
+        this.dataChannel.send(JSON.stringify({ type: 'CHAT', ...message }));
+    }
+
+    close() {
+        try {
+            if (this.dataChannel) {
+                this.dataChannel.close();
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        try {
+            if (this.peerConnection) {
+                this.peerConnection.close();
+            }
+        } catch (e) {
+            // ignore
+        }
     }
 
     // --- THE HANDSHAKE METHODS ---
