@@ -38,7 +38,7 @@ export function createApp(options = {}) {
             }
             let requested = decodeURIComponent(url.pathname);
             if (requested.startsWith('/src/')) requested = requested.slice(4);
-            if (requested === '/') requested = '/index.html';
+            if (['/', '/received', '/transfers', '/help', '/settings'].includes(requested)) requested = '/index.html';
             if (requested.includes('\\') || requested.includes('\0') || requested.split('/').some(part => part.startsWith('.'))) return respond(404, '{"error":"Not found"}');
             const target = path.resolve(publicRoot, `.${requested}`);
             const type = types[path.extname(target)];
@@ -95,7 +95,7 @@ export function createApp(options = {}) {
                 if (typeof data.roomId !== 'string' || !/^[a-zA-Z0-9_-]{8,64}$/.test(data.roomId)) return send(ws, { type: 'ERROR', message: 'Use a room code with 8-64 letters, numbers, dashes or underscores.' });
                 if (ws.roomId === data.roomId) return;
                 const members = rooms.get(data.roomId) || new Set();
-                if (members.size >= 2) return send(ws, { type: 'ERROR', message: 'This room already has two peers.' });
+                if (members.size >= 2) return send(ws, { type: 'ERROR', message: 'This room already has two devices.' });
                 leave(ws);
                 ws.roomId = data.roomId;
                 const initiator = members.size === 0;

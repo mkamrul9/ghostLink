@@ -27,6 +27,7 @@ export default class Component {
         if (!this.element) return;
         // Keep drafts and keyboard focus when an unrelated live update renders a panel.
         const saved = [...this.element.querySelectorAll('[data-preserve]')].map(input => ({ name: input.getAttribute('data-preserve'), value: input.value, start: input.selectionStart, end: input.selectionEnd, focused: input === document.activeElement }));
+        const scrollPositions = [...this.element.querySelectorAll('[data-scroll]')].map(node => ({ name: node.dataset.scroll, top: node.scrollTop }));
         const scroll = this.element.querySelector('.chat-list');
         const atBottom = scroll && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 40;
         const newElement = this.createDOM();
@@ -42,6 +43,7 @@ export default class Component {
                 if (typeof item.start === 'number') input.setSelectionRange(item.start, item.end);
             }
         }
+        for (const item of scrollPositions) this.element.querySelectorAll('[data-scroll]').forEach(node => { if (node.dataset.scroll === item.name) node.scrollTop = item.top; });
         const nextScroll = this.element.querySelector('.chat-list');
         if (nextScroll) nextScroll.scrollTop = atBottom ? nextScroll.scrollHeight : scroll?.scrollTop || 0;
     }

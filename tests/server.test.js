@@ -25,7 +25,7 @@ test('serves the app, assets, config and health with security headers', async t 
     assert.match(await root.text(), /Mystic/);
     assert.equal(root.headers.get('x-content-type-options'), 'nosniff');
     assert.match(root.headers.get('content-security-policy'), /frame-ancestors 'none'/);
-    for (const resource of ['/assets/mystic-mark.svg', '/index.js', '/styles.css', '/manifest.webmanifest', '/src/index.html']) assert.equal((await fetch(app.url + resource)).status, 200, resource);
+    for (const resource of ['/assets/mystic-mark.svg', '/index.js', '/styles.css', '/manifest.webmanifest', '/src/index.html', '/help', '/received', '/settings', '/transfers']) assert.equal((await fetch(app.url + resource)).status, 200, resource);
     assert.equal((await (await fetch(app.url + '/api/config')).json()).maxFileSize, 268435456);
     assert.equal((await (await fetch(app.url + '/healthz')).json()).status, 'ok');
     for (const resource of ['/.env', '/.git/config', '/server.js', '/%2e%2e%5cpackage.json', '/missing.js']) assert.equal((await fetch(app.url + resource)).status, 404, resource);
@@ -39,7 +39,7 @@ test('assigns roles, limits rooms to two, isolates rooms and cleans up membershi
     assert.equal((await join(b, 'private-room-one')).initiator, false);
     await peer;
     const full = message(c, 'ERROR'); c.send(JSON.stringify({ type: 'JOIN', roomId: 'private-room-one' }));
-    assert.match((await full).message, /two peers/);
+    assert.match((await full).message, /two devices/);
     await join(c, 'private-room-two');
     const offer = message(b, 'OFFER');
     a.send(JSON.stringify({ type: 'OFFER', sdp: { type: 'offer', sdp: 'example' }, secret: 'strip-this' }));

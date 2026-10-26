@@ -1,3 +1,4 @@
+import { filePath, safePath } from './FileLibrary.js';
 import WorkerManager from '../worker/WorkerManager.js';
 import { CHUNK_SIZE, createChunkGenerator } from '../helpers/FileChunker.js';
 import { generateEncryptionKey, importKeyFromRaw } from './CryptoVault.js';
@@ -49,7 +50,7 @@ export default class TransferManager {
             do { id = crypto.getRandomValues(new Uint32Array(1))[0]; } while (this.queued.has(id) || this.senders.has(id) || this.receivers.has(id));
             const job = { id, file };
             this.queued.set(id, job);
-            this.options.onAdd?.({ id, name: file.name, size: file.size, direction: 'send', status: 'queued', progress: 0, startedAt: Date.now() }, file);
+            this.options.onAdd?.({ id, name: file.name, relativePath: filePath(file), size: file.size, direction: 'send', status: 'queued', progress: 0, startedAt: Date.now() }, file);
             return job;
         });
         this.queue = this.queue.catch(() => {}).then(async () => {
@@ -73,7 +74,7 @@ export default class TransferManager {
             const rawKey = Array.from(new Uint8Array(await crypto.subtle.exportKey('raw', key)));
             const ready = this.wait(`${fileId}:ready`, signal);
             // Metadata and keys travel only over the encrypted WebRTC data channel.
-            this.rtc.sendControl({ type: 'FILE_META', fileId, fileName: file.name, relativePath: file.webkitRelativePath || file.fullPath || file.name, fileSize: file.size, totalChunks: Math.ceil(file.size / CHUNK_SIZE), mimeType: file.type || 'application/octet-stream', rawKey });
+            this.rtc.sendControl({ type: 'FILE_META', fileId, fileName: file.name, relativePath: filePath(file), fileSize: file.size, totalChunks: Math.ceil(file.size / CHUNK_SIZE), mimeType: file.type || 'application/octet-stream', rawKey });
             await ready;
             const started = performance.now();
             const manager = this;
@@ -136,10 +137,10 @@ export default class TransferManager {
                 if (estimate?.quota && estimate.quota - estimate.usage < message.fileSize * 1.1) throw new Error('Not enough browser storage. Free space in your vault.');
                 if (await this.db.getMetadata(id)) throw new Error('File identifier collision. Please retry.');
                 const cryptoKey = await importKeyFromRaw(new Uint8Array(message.rawKey));
-                const metadata = { fileId: id, fileName: message.fileName.replace(/[\\/\x00-\x1f]/g, '_'), relativePath: String(message.relativePath || message.fileName).slice(0, 1024), fileSize: message.fileSize, mimeType: String(message.mimeType || 'application/octet-stream').slice(0, 120), totalChunks: message.totalChunks, cryptoKey, complete: false, createdAt: Date.now() };
+                const metadata = { fileId: id, fileName: message.fileName.replace(/[\\/\x00-\x1f]/g, '_'), relativePath: safePath(String(message.relativePath || message.fileName).slice(0, 1024)), fileSize: message.fileSize, mimeType: String(message.mimeType || 'application/octet-stream').slice(0, 120), totalChunks: message.totalChunks, cryptoKey, complete: false, createdAt: Date.now() };
                 await this.db.saveMetadata(metadata);
                 this.receivers.set(id, new FileReceiver(metadata, this.db, (progress, bytes, speed) => this.options.onProgress?.(id, { progress, bytes, speed })));
-                this.options.onAdd?.({ id, name: metadata.fileName, size: metadata.fileSize, progress: 0, status: 'receiving', direction: 'receive', startedAt: Date.now() });
+                this.options.onAdd?.({ id, name: metadata.fileName, relativePath: metadata.relativePath, size: metadata.fileSize, progress: 0, status: 'receiving', direction: 'receive', startedAt: Date.now() });
                 this.rtc.sendControl({ type: 'FILE_READY', fileId: id });
             } else if (message.type === 'FILE_END') {
                 const receiver = this.receivers.get(id);

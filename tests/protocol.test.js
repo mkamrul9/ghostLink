@@ -32,6 +32,7 @@ test('rejects invalid metadata, oversize transfers and unauthenticated ciphertex
     await manager.control({ ...meta, fileSize: 2048 });
     assert.equal(messages.at(-1).type, 'FILE_ERROR'); assert.equal(await db.getMetadata(17), undefined);
     await manager.control({ ...meta, rawKey: [1, 2] }); assert.equal(messages.at(-1).type, 'FILE_ERROR');
+    await manager.control({ ...meta, relativePath: '../outside.txt' }); assert.equal(messages.at(-1).type, 'FILE_ERROR');
     await manager.control(meta);
     const { iv, encryptedBuffer } = await encryptChunk(key, new Uint8Array([1, 2, 3]));
     new Uint8Array(encryptedBuffer)[0] ^= 1;
