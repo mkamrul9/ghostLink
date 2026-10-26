@@ -17,6 +17,13 @@ wss.on('connection', (ws) => {
             }
             rooms.get(currentRoom).add(ws);
             console.log(`Client joined room: ${currentRoom}`);
+            
+            // Notify others in the room that someone new joined
+            rooms.get(currentRoom).forEach(client => {
+                if (client !== ws && client.readyState === 1) {
+                    client.send(JSON.stringify({ type: 'PEER_JOINED', roomId: currentRoom }));
+                }
+            });
         }
         // If it's a signaling message (Offer, Answer, ICE Candidate), relay it!
         else if (currentRoom && rooms.has(currentRoom)) {

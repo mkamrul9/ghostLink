@@ -27,10 +27,10 @@ export default class DashboardShell extends Component {
             <section class="panel nav-panel">
               <div class="panel-title">Navigation</div>
               <nav class="nav-list">
-                <button class="nav-item is-active">Dashboard</button>
-                <button class="nav-item">Transfers</button>
-                <button class="nav-item">Vault</button>
-                <button class="nav-item">Settings</button>
+                <button class="nav-item is-active" data-view="dashboard">Dashboard</button>
+                <button class="nav-item" data-view="transfers">Transfers</button>
+                <button class="nav-item" data-view="vault">Vault</button>
+                <button class="nav-item" data-view="settings">Settings</button>
               </nav>
             </section>
 
@@ -46,14 +46,24 @@ export default class DashboardShell extends Component {
           </aside>
 
           <main class="app-main">
-            <section class="panel hero-panel">
+            <section class="panel hero-panel view-panel" data-panel="dashboard">
               <div class="panel-title">Drop Zone</div>
               <div id="drop-zone-slot"></div>
             </section>
 
-            <section class="panel queue-panel">
+            <section class="panel queue-panel view-panel" data-panel="dashboard,transfers">
               <div class="panel-title">Transfer Queue</div>
               <div id="queue-slot"></div>
+            </section>
+            
+            <section class="panel vault-panel view-panel" data-panel="vault" style="display: none;">
+              <div class="panel-title">Local Vault</div>
+              <div id="vault-slot"></div>
+            </section>
+            
+            <section class="panel settings-panel view-panel" data-panel="settings" style="display: none;">
+              <div class="panel-title">Settings</div>
+              <div id="settings-slot"></div>
             </section>
           </main>
 
@@ -85,5 +95,54 @@ export default class DashboardShell extends Component {
         </div>
       </div>
     `;
+    }
+
+    update() {
+        // Prevent default Component re-render which would destroy child mount points.
+        // View updates are handled imperatively in onMount subscription.
+    }
+
+    onMount() {
+        if (this.props.store) {
+            this.props.store.events.subscribe('stateChange', (state) => {
+                if (state.ui && state.ui.view) {
+                    this.updateView(state.ui.view);
+                }
+            });
+        }
+    }
+
+    updateView(view) {
+        // Update nav items
+        this.element.querySelectorAll('.nav-item').forEach(btn => {
+            if (btn.getAttribute('data-view') === view) {
+                btn.classList.add('is-active');
+            } else {
+                btn.classList.remove('is-active');
+            }
+        });
+
+        // Update panels
+        this.element.querySelectorAll('.view-panel').forEach(panel => {
+            const views = panel.getAttribute('data-panel').split(',');
+            if (views.includes(view)) {
+                panel.style.display = 'flex';
+            } else {
+                panel.style.display = 'none';
+            }
+        });
+    }
+
+    events() {
+        return [
+            { type: 'click', selector: '.nav-item', handler: this.onNavClick }
+        ];
+    }
+
+    onNavClick(e) {
+        const view = e.target.getAttribute('data-view');
+        if (view) {
+            this.props.store.state.ui = { ...this.props.store.state.ui, view };
+        }
     }
 }

@@ -60,6 +60,20 @@ export default class DBManager {
     }
 
     /**
+     * Gets all saved file metadata from the vault.
+     */
+    async getAllMetadata() {
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['metadata'], 'readonly');
+            const store = transaction.objectStore('metadata');
+            const request = store.getAll();
+
+            request.onsuccess = (event) => resolve(event.target.result);
+            request.onerror = (e) => reject(e.target.error);
+        });
+    }
+
+    /**
      * Saves a single encrypted ArrayBuffer chunk to the database.
      */
     async saveChunk(fileId, chunkIndex, encryptedBuffer) {

@@ -71,6 +71,17 @@ export default class SessionControls extends Component {
         if (typeof this.props.onCopy !== 'function') return;
         const room = this.state.roomInput.trim();
         if (!room) return;
-        this.props.onCopy(room);
+        
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', room);
+        url.searchParams.set('init', 'false');
+        
+        navigator.clipboard.writeText(url.toString()).then(() => {
+            if (window.toast) {
+                window.toast.show('Invite link copied to clipboard!', 'success');
+            }
+        }).catch(err => {
+            console.error('Failed to copy', err);
+        });
     }
 }

@@ -695,6 +695,162 @@ body {
   font-family: 'Space Grotesk', sans-serif;
 }
 
+/* -------------------------------------
+ * Phase 5 Panels (Vault, Settings, Toasts)
+ * ------------------------------------- */
+
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 9999;
+}
+
+.toast {
+  background: var(--surface-1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color: var(--text-1);
+  font-size: 0.9rem;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-success { border-left: 4px solid var(--accent-1); }
+.toast-info { border-left: 4px solid var(--accent-3); }
+.toast-warning { border-left: 4px solid var(--accent-2); }
+.toast-error { border-left: 4px solid #ff4d4f; }
+
+.toast-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.toast-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.toast-dialog {
+  background: var(--surface-1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 24px;
+  border-radius: 12px;
+  max-width: 400px;
+  width: 90%;
+  transform: scale(0.95);
+  transition: transform 0.3s ease;
+}
+
+.toast-dialog.visible {
+  transform: scale(1);
+}
+
+.toast-dialog-message {
+  margin-bottom: 24px;
+  color: var(--text-1);
+  line-height: 1.5;
+}
+
+.toast-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.vault-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-2);
+}
+
+.vault-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vault-card {
+  background: var(--surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 16px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vault-file-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.vault-file-meta {
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.settings-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-form label {
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.settings-form input {
+  background: var(--surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px;
+  border-radius: 6px;
+  color: var(--text-1);
+  font-family: inherit;
+}
+
+.settings-form input:focus {
+  outline: none;
+  border-color: var(--accent-1);
+}
+
+.settings-form small {
+  color: var(--text-2);
+}
+
+/* Fix panel overlap globally by ensuring they are self-contained */
+.panel {
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.full-height {
+  height: 100%;
+}
+
 .chat-input:disabled {
   opacity: 0.7;
   cursor: not-allowed;

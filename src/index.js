@@ -9,6 +9,10 @@ import SessionControls from './components/ui/SessionControls.js';
 import SessionSummary from './components/ui/SessionSummary.js';
 import ConnectionList from './components/ui/ConnectionList.js';
 import { createChunkGenerator } from './helpers/FileChunker.js';
+import SpeedGraph from './components/ui/SpeedGraph.js';
+import VaultPanel from './components/ui/VaultPanel.js';
+import SettingsPanel from './components/ui/SettingsPanel.js';
+import ToastNotification from './components/ui/ToastNotification.js';
 import WorkerManager from './worker/WorkerManager.js';
 import DBManager from './DB/DBManager.js';
 import HistoryDB from './DB/HistoryDB.js';
@@ -18,7 +22,7 @@ import FileReceiver from './utils/FileReceiver.js';
 import FileStreamer from './utils/FileStreamer.js';
 import SignalingChannel from './utils/SignalingChannel.js';
 import WebRTCConnection from './utils/WebRTCConnection.js';
-import SpeedGraph from './components/ui/SpeedGraph.js';
+
 
 const globalStore = new Store({
     initialState: {
@@ -195,7 +199,7 @@ const sendChat = (text) => {
 };
 // Mount the dashboard shell and UI widgets
 const appRoot = document.getElementById('app');
-const shell = new DashboardShell();
+const shell = new DashboardShell({ store: globalStore });
 shell.mount(appRoot);
 
 const dropZoneMount = document.getElementById('drop-zone-slot');
@@ -243,8 +247,11 @@ const sessionControls = new SessionControls({
     onCopy: (room) => {
         const url = new URL(window.location.href);
         url.searchParams.set('room', room);
-        url.searchParams.delete('init');
-        navigator.clipboard.writeText(url.toString()).then(() => alert('Invite link copied!'));
+        url.searchParams.delete('init'); // Ensure init is totally removed from the copy link
+        
+        navigator.clipboard.writeText(url.toString()).then(() => {
+            if (window.toast) window.toast.show('Invite link copied!', 'success');
+        });
     }
 });
 if (sessionControlsMount) sessionControls.mount(sessionControlsMount);
@@ -263,6 +270,11 @@ if (connectionsMount) connectionList.mount(connectionsMount);
 
 const sessionStatusMount = document.getElementById('session-status-slot');
 const sessionSummaryMount = document.getElementById('session-summary-slot');
+const vaultMount = document.getElementById('vault-slot');
+const settingsMount = document.getElementById('settings-slot');
+
+// Global Toast
+window.toast = new ToastNotification();
 
 const sessionStatus = new SessionStatus({ store: globalStore });
 if (sessionStatusMount) sessionStatus.mount(sessionStatusMount);
@@ -284,7 +296,8 @@ const sessionSummary = new SessionSummary({
         URL.revokeObjectURL(url);
     },
     onClear: async () => {
-        if (confirm('Are you sure you want to clear all history? This cannot be undone.')) {
+        const confirmed = window.toast ? await window.toast.confirm('Are you sure you want to clear all history? This cannot be undone.') : confirm('Are you sure?');
+        if (confirmed) {
             // Re-initialize DB to clear it (lazy way is to just delete and recreate, but we can also just clear object stores)
             const db = historyDb.db;
             if (db) {
@@ -296,13 +309,21 @@ const sessionSummary = new SessionSummary({
                     globalStore.state.chat = [];
                     globalStore.state.transfers = [];
                     globalStore.state.peers = [];
-                    alert('History cleared.');
+                    if (window.toast) {
+                        window.toast.show('History cleared.', 'success');
+                    }
                 };
             }
         }
     }
 });
 if (sessionSummaryMount) sessionSummary.mount(sessionSummaryMount);
+
+const vaultPanel = new VaultPanel({ store: globalStore });
+if (vaultMount) vaultPanel.mount(vaultMount);
+
+const settingsPanel = new SettingsPanel({ store: globalStore });
+if (settingsMount) settingsPanel.mount(settingsMount);
 
 // Mount the throughput graph and expose it globally for reporting
 const speedGraph = new SpeedGraph({ store: globalStore });
@@ -369,7 +390,8 @@ async function startup() {
         const roomFromUrl = params.get('room');
         if (roomFromUrl) {
             globalStore.state.session = { ...globalStore.state.session, roomId: roomFromUrl };
-            initP2P(roomFromUrl, params.has('init'));
+            const isInit = params.get('init') === 'true';
+            initP2P(roomFromUrl, isInit);
         }
 
         console.log('App Startup Complete. History loaded.');
@@ -434,6 +456,13 @@ async function initP2P(roomId, isInitiator) {
                 webrtc.handleIceCandidate(msg.candidate);
                 break;
 
+            case 'PEER_JOINED':
+                if (isInitiator) {
+                    console.log('Peer joined, creating offer...');
+                    webrtc.createOffer();
+                }
+                break;
+
             // Receiver gets file metadata + raw key from sender via signaling
             case 'FILE_META':
                 console.log('[FILE_META] received, isInitiator:', isInitiator, msg.fileName);
@@ -486,7 +515,6 @@ async function initP2P(roomId, isInitiator) {
         }
     });
 
-    if (isInitiator) {
-        setTimeout(() => webrtc.createOffer(), 2000);
-    }
+    // We no longer blindly create an offer after 2 seconds. 
+    // We wait for the PEER_JOINED signal.
 }
