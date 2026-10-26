@@ -202,7 +202,7 @@ async function connectRoom(input, automatic = false) {
                 toast.show('The connection server disconnected. Your current peer session can continue.', 'warning');
                 return;
             }
-            ui({ connectionStatus: 'disconnected', error: 'The connection server disconnected. ReconnectingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' });
+            ui({ connectionStatus: 'disconnected', error: 'The connection server disconnected. ReconnectingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦' });
             if (reconnectAttempt < 3) reconnectTimer = setTimeout(() => { reconnectAttempt++; connectRoom(room, true); }, Math.min(10000, 1000 * 2 ** reconnectAttempt) + Math.random() * 500);
             else ui({ error: 'Unable to reconnect. Check your network and try again.' });
         };
@@ -232,11 +232,14 @@ async function vaultAction(action, id) {
     try {
         if (action === 'delete') {
             if (!await toast.confirm('Delete this received file from this browser?')) return;
+            transfers?.cancel(id);
+            // Let any chunk already being written finish before deleting its records.
+            await rtc?.incoming;
             await db.deleteFile(id);
             await refreshVault();
             toast.show('File deleted from this device.', 'success');
         } else {
-            toast.show('Preparing your downloadÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦', 'info');
+            toast.show('Preparing your downloadÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦', 'info');
             const { blob, name } = await db.getFileBlob(id);
             downloadBlob(blob, name);
         }
