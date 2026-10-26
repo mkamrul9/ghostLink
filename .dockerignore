@@ -1,0 +1,9 @@
+.git
+node_modules
+test-results
+playwright-report
+coverage
+docs
+.env
+.env.*
+commands.txt

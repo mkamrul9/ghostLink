@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: mystic
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: MAX_CLIENTS
+        value: "10000"
+      - key: MAX_FILE_SIZE
+        value: "268435456"
