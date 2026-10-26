@@ -8,5 +8,11 @@ test-results/
 playwright-report/
 *.log
 .DS_Store
-docs/
+docs/phase*.txt
+docs/phase*_snapshot.md
+docs/GHOSTLINK_REFERENCE.md
 commands.txt
+
+deploy/.env
+
+.cache/

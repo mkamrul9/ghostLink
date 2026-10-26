@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="350" viewBox="0 0 1200 350" fill="none" role="img" aria-labelledby="title desc">
+<title id="title">Mystic</title><desc id="desc">Send complete folders. Private, resumable, verified.</desc>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1200" y2="350"><stop stop-color="#191c21"/><stop offset="1" stop-color="#26201c"/></linearGradient><radialGradient id="glow"><stop stop-color="#ff9b59" stop-opacity=".16"/><stop offset="1" stop-color="#ff9b59" stop-opacity="0"/></radialGradient></defs>
+<rect width="1200" height="350" rx="24" fill="url(#bg)"/><ellipse cx="1010" cy="175" rx="300" ry="260" fill="url(#glow)"/>
+<g transform="translate(60 52)"><rect width="80" height="80" rx="23" fill="#ff9b59"/><path d="M53 29 41 17H23a3 3 0 0 0-3 3v40a3 3 0 0 0 3 3h27a3 3 0 0 0 3-3v-6M41 17v12h12v4M34 43h31m-9-9 9 9-9 9" stroke="#252126" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 32h3M8 43h5M10 54h3" stroke="#8c472a" stroke-width="3" stroke-linecap="round"/></g>
+<text x="161" y="111" font-family="Arial,sans-serif" font-size="58" font-weight="700" letter-spacing="-2" fill="#fff3e8">mystic<tspan fill="#ff9b59">.</tspan></text>
+<text x="60" y="211" font-family="Arial,sans-serif" font-size="43" font-weight="600" letter-spacing="-1" fill="#fff3e8">Send complete folders.</text>
+<text x="62" y="267" font-family="Arial,sans-serif" font-size="26" fill="#c6bdb4">Private. Resumable. Verified.</text>
+<g stroke-linecap="round" stroke-linejoin="round"><path d="M877 119h78l24 26h143v116a14 14 0 0 1-14 14H877a14 14 0 0 1-14-14V133a14 14 0 0 1 14-14Z" fill="#2e2722" stroke="#926a4b" stroke-width="2"/>
+<rect x="840" y="78" width="130" height="154" rx="14" fill="#2a2d33" stroke="#6e6258" stroke-width="2" transform="rotate(-9 840 78)"/>
+<path d="M882 109h51m-51 20h51m-51 20h29" stroke="#a09890" stroke-width="5"/>
+<rect x="929" y="112" width="121" height="145" rx="14" fill="#37302a" stroke="#b18058" stroke-width="2"/>
+<path d="M954 142h45m-45 18h45m-45 18h26" stroke="#d1b59b" stroke-width="5"/>
+<circle cx="1068" cy="246" r="39" fill="#ff9b59"/><path d="m1050 246 12 12 23-25" stroke="#2c2118" stroke-width="6"/>
+<path d="M770 230h53m-13-12 13 12-13 12" stroke="#ff9b59" stroke-width="4"/></g></svg>

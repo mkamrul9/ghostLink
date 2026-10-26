@@ -18,7 +18,7 @@ The first audience is people moving projects, photo folders and work between the
 
 File sharing itself is established. WhatsApp supports documents up to 2 GB ([official messaging page](https://www.whatsapp.com/messaging?lang=en)); Telegram supports 2 GB for free users and 4 GB with Premium ([official Premium FAQ](https://telegram.org/faq_premium)). They also have mature messaging and asynchronous delivery, which Mystic deliberately does not provide with an off-server file model.
 
-Direct browser sharing is also established: [PairDrop](https://github.com/schlagmichdoch/PairDrop) and [FilePizza](https://github.com/kern/filepizza) already provide it. We should not claim to have invented it, offer unlimited transfers on every device, or say no competitor has these features. Mystic's proposed differentiator is the combined folder workflow, durable resume, byte verification, local protection and simple recipient controls. Adoption needs testing with real users; a feature list does not prove demand.
+Direct browser sharing is also established: [PairDrop](https://github.com/schlagmichdoch/PairDrop) and [FilePizza](https://github.com/kern/filepizza) already provide it. We should not claim to have invented it, offer unlimited transfers on every device, or say no competitor has these features. PairDrop already offers persistent pairing, rooms, relay support and operating-system sharing integrations. QR codes or another room button alone would not set Mystic apart. Mystic's proposed differentiator is the combined folder workflow, durable resume, byte verification, local protection, a recoverable encrypted external-folder library and simple recipient controls. Adoption needs testing with real users; a feature list does not prove demand.
 
 Suggested concise product line: **Send complete folders privately. Resume where you left off.**
 
@@ -28,7 +28,7 @@ Both file-holding devices must remain online with Mystic open while transferring
 
 Browser quotas, available storage and save capabilities still apply. When neither native saving nor transferable-stream downloads work, the guarded memory fallback is 256 MiB. Directory inputs on some browsers omit empty folders; directory handles, dropped folders and the New empty folder action preserve them.
 
-A previously saved download or encrypted backup is required after site data is cleared. Passphrases cannot be reset. Protection covers saved file metadata and keys; chat and transfer history are separate and can be cleared independently.
+An external encrypted library can be reopened with its directory and passphrase after site data is cleared. Browser-only files still need a previously saved download or backup. Passphrases cannot be reset. Protection covers saved file metadata and keys; chat and transfer history are separate and can be cleared independently.
 
 TURN can forward encrypted network packets without storing files. The code prepares expiring credentials, but no relay is provisioned or enabled by default. Some networks will fail without one. There are no server accounts, offline cloud delivery or cloud backups.
 

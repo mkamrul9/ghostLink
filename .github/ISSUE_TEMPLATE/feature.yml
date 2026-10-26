@@ -1,0 +1,30 @@
+name: Feature proposal
+description: Suggest a focused improvement to private folder handoffs.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What problem would this solve?
+      description: Explain the user and the task, with a concrete example.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe a simple workflow, plus alternatives you considered.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Browser, privacy or deployment constraints
+      description: Note any new permissions, storage, services or dependencies.
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am interested in implementing or testing this with maintainer guidance.

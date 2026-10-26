@@ -10,19 +10,29 @@
     "test": "node --test tests/*.test.js",
     "test:e2e": "node tests/browser.e2e.js",
     "test:load": "node scripts/load-test.mjs",
-    "verify": "npm run check && npm test && npm run test:e2e && npm run test:recovery && npm run test:group && npm run test:large && npm run test:mobile",
+    "verify": "npm run check && npm test && npm run test:e2e && npm run test:recovery && npm run test:local-folder && npm run test:group && npm run test:large && npm run test:mobile",
     "test:mobile": "node tests/mobile.e2e.js",
     "build:crypto": "node scripts/build-crypto.mjs",
     "test:recovery": "node tests/recovery.e2e.js",
     "test:group": "node tests/group.e2e.js",
-    "test:large": "node tests/large.e2e.js"
+    "test:large": "node tests/large.e2e.js",
+    "test:local-folder": "node tests/local-folder.e2e.js",
+    "docs:screenshots": "node scripts/readme-screenshots.mjs",
+    "check:deployment": "node scripts/deployment-check.mjs"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mkamrul9/ghostLink.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "file-sharing",
+    "webrtc",
+    "peer-to-peer",
+    "privacy",
+    "folder-sharing",
+    "self-hosted"
+  ],
+  "author": "Mystic contributors",
   "license": "ISC",
   "type": "module",
   "bugs": {

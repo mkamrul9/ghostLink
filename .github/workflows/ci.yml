@@ -15,17 +15,40 @@ jobs:
       BROWSER_CHANNEL: chrome
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run build:crypto
+      - run: git diff --exit-code -- src/vendor/
       - run: npm run verify
       - run: npm audit --omit=dev --audit-level=high
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: browser-results
-          path: test-results/
+          path: |
+            test-results/*.png
+            test-results/mobile/*.png
           if-no-files-found: ignore
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -t mystic:ci .
+      - run: docker run -d --name mystic-ci -p 127.0.0.1:8080:8080 mystic:ci
+      - name: Check container health and served app
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent http://127.0.0.1:8080/healthz; then break; fi
+            sleep 2
+          done
+          node scripts/deployment-check.mjs http://127.0.0.1:8080 --allow-http
+      - if: always()
+        run: docker logs mystic-ci
+      - if: always()
+        run: docker rm -f mystic-ci

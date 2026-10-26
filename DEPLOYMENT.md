@@ -53,3 +53,12 @@ The image runs as a non-root user and has a `/healthz` health check. Put it behi
 ## Rollback
 
 Revert the relevant commit on GitHub and redeploy, or use the host's previous successful deployment. The server has no file database to migrate. Browser IndexedDB upgrades retain the old object stores and add an index; do not remove or rename storage without a migration.
+
+
+## Repeatable deployment checks
+
+For the Linux HTTPS/coturn template, see [deploy/README.md](deploy/README.md). It requires your own domain and public host; nothing is deployed automatically by committing it. The repository CI separately builds and smoke-checks the app container.
+
+Run `npm run check:deployment -- https://your-site.example --require-relay` to check HTTP health, security headers, public client settings and required assets. This confirms a relay is configured, not that a TURN allocation or real cross-network transfer succeeds.
+
+The optional external-folder library is entirely client-side. Hosts do not mount users' libraries or store their keys. A user can select a drive such as D: in desktop Chrome or Edge; normal browser-only copies remain subject to the browser profile's storage location and quota.

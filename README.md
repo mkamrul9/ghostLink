@@ -1,89 +1,121 @@
 # Mystic
 
-![Mystic](src/assets/mystic-logo.svg)
+<p align="center"><img src="docs/images/mystic-banner.svg" alt="Mystic: send complete folders. Private, resumable, verified." width="100%"></p>
 
-Private file sharing and chat between browsers, with a simple orange and charcoal interface. Files travel over a WebRTC data channel; the Node server serves the app and relays connection handshakes. File contents, names and AES keys never travel over the signaling connection.
+<p align="center">
+  <a href="https://github.com/mkamrul9/ghostLink/actions/workflows/ci.yml"><img src="https://github.com/mkamrul9/ghostLink/actions/workflows/ci.yml/badge.svg" alt="Continuous integration"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-ISC-orange.svg" alt="ISC license"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-43853d.svg" alt="Node.js 22 or later"></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-ff9b59.svg" alt="Contributions welcome"></a>
+</p>
 
-## Run locally
+<p align="center"><strong>Private folder sharing, with a way back when a transfer stops.</strong><br>Open a room, choose recipients, and send. No account or phone number required.</p>
 
-Requires Node.js 22 or later.
+<p align="center"><a href="#features">Features</a> &middot; <a href="#quick-start">Quick start</a> &middot; <a href="#self-hosting">Self-hosting</a> &middot; <a href="CONTRIBUTING.md">Contribute</a> &middot; <a href="SECURITY.md">Security</a></p>
+
+![Mystic desktop workspace with a complete project folder ready to send](docs/images/mystic-desktop.png)
+
+## Features
+
+- **Complete folders.** Keep nested paths and empty folders, organize files before sending, and save received folders as ZIP64 archives or native folders where supported.
+- **Durable resume.** Reconnect the same devices and reselect the original files. Mystic checks the saved prefix and sends the missing part. An unchanged file already saved on the receiver is verified without sending its payload again.
+- **Verified delivery.** Completed files have matching full-file SHA-256 checksums. Exports are checked again; receipts record the result. Checksums verify bytes, not sender identity.
+- **An encrypted local library.** On supported desktop browsers, receive directly into a folder you choose, outside browser-managed storage. Reopen that folder with its passphrase after clearing website data.
+- **Private group rooms.** Up to six devices by default. Choose who receives your files; new arrivals stay unselected. Share room invites through your device, a messenger, email, or a copied code.
+- **Large streaming downloads.** Native disk writers and browser-owned download streams avoid loading the whole file into memory on supported browsers.
+- **Useful local tools.** Search, sort, rename, move, bulk selection, private room messages, encrypted portable backups, and separate history clearing.
+- **Help without a subscription.** Pip, the courier-bird helper, explains the app and prepares commands such as `send report.pdf`. You review the files before sending. It runs locally without an AI service or API key.
+- **A responsive workspace.** Phone, tablet, desktop, keyboard navigation, reduced motion, and touch-friendly controls.
+
+<details>
+<summary>See the mobile workspace</summary>
+<br>
+<img src="docs/images/mystic-mobile.png" alt="Mystic received folders on a phone" width="330">
+</details>
+
+## Quick start
+
+Install [Node.js 22 or later](https://nodejs.org/), then:
 
 ```sh
+git clone https://github.com/mkamrul9/ghostLink.git
+cd ghostLink
 npm ci
 npm start
 ```
 
-Open http://localhost:8080, create a room, and share its invite with another browser or device. For another device to use Web Crypto, serve through HTTPS. The deployment configuration serves both the client and signaling from the same origin, automatically using WSS on HTTPS.
+Open **http://localhost:8080**. Create a room in one browser profile, join from another, and send a sample file. `localhost` links work only on the same computer. Use HTTPS to share with another device.
 
-1. Create a room and share the invite. Invites contain a cryptographically random room code in the URL fragment. New room codes use 16 readable characters (80 random bits), grouped for easy copying.
-2. Connect the other device. Rooms allow six devices by default. Select recipients in Send to; each device can send. New arrivals are not selected automatically.
-3. Choose or drop files and folders, then press Send.
-4. Open **Received files** to download a file or a whole folder. Folder downloads are ZIP files that preserve the folder layout.
+For development, use `npm run dev`. There is no frontend build step for normal operation.
 
-## Implemented
+### Send your first folder
 
-- Files and folders, drag and drop, folder trees, search, sorting, multi-selection, rename, move to folder, and bulk removal. Organizing files in Mystic leaves original files on the computer unchanged.
-- Room sharing through native device sharing, WhatsApp, Telegram, email, or copied links/codes. These open a share composer; the user chooses the recipient and sends the invite.
-- A Help page, searchable questions, and interactive sending, receiving, and folder tutorials.
-- **Pip**, an animated SVG courier-bird helper. It answers common questions locally and prepares file actions such as `send report.pdf`, `send all photos`, or `send folder Holiday`. Every send command shows a file review before sending. Pip is a free built-in guide, not a generative AI chatbot; no API key or external AI service is used. It only matches files explicitly added to Mystic and never reads their contents.
-- Random private room invites, deterministic connection roles, queued ICE candidates, disconnect handling and bounded signaling reconnects.
-- 60 KiB file chunks, AES-256-GCM per file, encryption in a module worker, and bounded send buffering.
-- Receiver acknowledgements after encrypted IndexedDB chunk writes; completion only after byte/chunk counts and full-file SHA-256 match. Checksums verify bytes, not sender identity. Downloadable receipts record the result. Exports recheck verified file checksums before completing, and reject conflicting archive paths before writing.
-- Cancellation and durable partial resume, including after a refresh: reconnect the same browser profiles and re-add the original file. The sender verifies the entire saved prefix before transmitting only the missing suffix. Re-sending an unchanged complete file verifies it without sending payload again. Bidirectional sharing, zero-byte files and explicit empty folders are supported.
-- Persistent received files with individual/ZIP folder downloads, rename, organization and deletion. Native file and folder writers stream to disk on supported desktop browsers; ZIP64 exports preserve large archives and empty directories. Browsers with transferable streams and service workers use a browser-owned download stream. Only browsers without either streaming route retain the 256 MiB memory fallback. The download worker never uploads or caches contents, and downloads require the page to stay open.
-- Private peer chat, display names, device-local preferences, history export and independent history clearing. History retains the newest 500 entries per category to bound local storage.
-- Optional passphrase protection, encrypted local backups/restore, persistent-storage requests and screen wake lock during transfers when supported.
-- Responsive, keyboard-accessible navigation, focus-preserving live updates, reduced-motion support and an original SVG logo/favicon.
-- HTTP security headers, same-origin WebSocket checks, bounded payloads and connections, per-socket message rate limits, configurable room limits and targeted signaling, heartbeats and a health endpoint.
+1. Create a room and share its invite with the receiving devices.
+2. On the sender, check the recipients in **Send to**.
+3. Add files or a folder, then choose **Send**.
+4. On the receiver, open **Received files** and download what you need.
 
-## Verification
+For durable local storage, choose **Settings > Choose local folder** before receiving, and keep its passphrase. A local library is encrypted; use Mystic to open or export it. Existing browser files stay in browser storage when you switch locations. See the [local library guide](docs/local-library.md).
+
+## What stays private
+
+File contents, file names, messages, and AES keys travel over peer WebRTC channels. Mystic's Node server serves the application and relays connection handshakes. It has **no file-storage endpoint, accounts, or cloud backup**. A configured TURN relay forwards encrypted packets when a direct connection fails.
+
+The signaling service is trusted for peer negotiation; Mystic does not independently authenticate peer identities. Share invites with people you trust. Without optional passphrase protection, people using the same browser profile can open browser-saved copies. Chat and transfer history are separate from file protection.
+
+Read the [privacy and security model](docs/security-model.md) and [vulnerability reporting policy](SECURITY.md).
+
+## Browser support and limits
+
+Use a current browser with WebRTC and Web Crypto over HTTPS. Chrome and Edge on a computer provide the optional external-folder library. Other browsers can use browser storage and available streaming downloads. See [browser support](docs/browser-support.md).
+
+- Both devices must stay online with Mystic open during a transfer. An installed browser web app does not remove this restriction.
+- Browser storage remains subject to browser quotas. The optional external-folder library uses the selected drive instead; that drive still needs free space and permission.
+- When neither native saving nor transferable-stream downloads work, a 256 MiB memory-download fallback prevents unbounded buffering.
+- Browser-only copies require a saved download or backup after website data is cleared. External library copies can be reopened with their folder and passphrase. No passphrase reset is possible.
+- Folder inputs on some browsers omit empty directories. Directory handles, dropped folders, and **New empty folder** preserve them.
+- Restrictive networks may need TURN. A relay host must be configured; credentials alone do not create a relay.
+
+## Self-hosting
+
+The client and signaling service share one origin. Start with the [deployment guide](DEPLOYMENT.md): it covers Docker, HTTPS, free preview hosting, TURN, and release checks.
 
 ```sh
-npm run check
-npm test
-npx playwright install chromium
-npm run test:e2e
-npm run test:mobile
-npm run test:load
+docker build -t mystic .
+docker run --rm -p 8080:8080 mystic
 ```
 
-`npm run verify` runs syntax/import checks, unit/integration tests, desktop, encrypted-backup/recovery, four-device group, 750-file staging and large-file acceptance tests and a responsive-layout suite. The browser suite uses separate browser profiles and compares downloaded content with the source SHA-256. ZIP paths and contents are checked with an independent ZIP reader. Mobile checks cover 320, 360, 390 and 430 pixel phones, a 768 pixel tablet, 844x390 landscape, and reduced keyboard space. These are automated viewport checks, not a claim of physical-device testing. The large-file suite transfers a real 280 MiB file across local WebRTC into IndexedDB, verifies its checksum, and checks both a native-writer test double and a real browser-owned streaming download. This checks the former size boundary, not arbitrary file sizes or internet throughput. Screenshots are written to `test-results/`. GitHub Actions runs verification for pushes and pull requests using Google Chrome already installed on the Ubuntu 24.04 runner. Locally, the suite uses Playwright Chromium by default; set `BROWSER_CHANNEL=chrome` to use an installed Google Chrome.
+For a Linux server with a domain and public IP, see [the HTTPS and relay stack](deploy/README.md). Keep secrets in the ignored deployment environment file. The project includes no production service or promised free relay capacity.
 
-The load script defaults to 1,000 local WebSocket clients in 500 rooms. Set `LOAD_CLIENTS` to an even number up to 10,000. This measures signaling only, with the server and clients in the same process; it does not demonstrate production concurrency, browser throughput, TURN capacity or availability on a hosting plan.
+## Contribute
 
-See [PRODUCT.md](PRODUCT.md) for the intended audience, differentiation, evidence and remaining release boundaries.
+Contributions are welcome: code, browser testing, accessibility, documentation, and reproducible bug reports all help.
 
-## Deploy
+- Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [architecture guide](docs/architecture.md).
+- Browse [good first issues](https://github.com/mkamrul9/ghostLink/labels/good%20first%20issue) or [help wanted](https://github.com/mkamrul9/ghostLink/labels/help%20wanted).
+- [Report a bug](https://github.com/mkamrul9/ghostLink/issues/new/choose), [suggest a feature](https://github.com/mkamrul9/ghostLink/issues/new/choose), or ask in [Discussions](https://github.com/mkamrul9/ghostLink/discussions).
+- Please follow the [code of conduct](CODE_OF_CONDUCT.md).
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the free Render setup, Docker option, configuration and production capacity requirements. There is no deployment build step or server-side file database. The vendored hash bundle is tracked; regenerate it with npm run build:crypto after updating its dependency.
+Small, focused pull requests are easiest to review. There is no contributor agreement to sign. Contributions use the existing ISC project license.
 
-## Storage and privacy
+### Checks
 
-History and received files belong to the browser profile. Settings can protect saved file metadata and encryption keys with a passphrase (PBKDF2-SHA-256, 600,000 iterations; AES-256-GCM). File packets remain encrypted. A protected vault starts locked after reload; locking clears the wrapping key from application state. Protected files also lock after ten minutes without user activity, when no transfer or download is active. Messages and transfer history are separate and remain readable until cleared. Without protection, anyone using the profile can download saved files. The browser Web Locks API prevents concurrent Mystic vault tabs where supported.
+```sh
+npm ci
+npx playwright install chromium
+npm run verify
+```
 
-Encrypted `.mystic` backups stream to the user's own drive. Restoring checks authenticated records, chunk ordering, file checksums and an authenticated footer; failed imports are rolled back, and existing files are never overwritten. Keep the backup passphrase: there is no reset. Clearing site data still removes local copies; recovery needs a previously saved backup or download. A request for persistent browser storage helps against eviction but does not prevent manual clearing. No file storage, accounts or cloud backups exist on the server. Legacy IndexedDB names are retained to preserve existing files.
+Verification includes protocol/storage tests, two-device sharing, encrypted backup recovery, local-folder recovery, four-device rooms, 750-file staging, a real 280 MiB transfer and streaming exports, and six responsive layouts. These are automated tests, not a claim of physical iOS/Android or hosted production-capacity testing. `npm run test:load` measures local signaling only.
 
-WebRTC uses DTLS for transport protection. AES file keys are exchanged inside that channel. The connection server is trusted for peer negotiation: there is no independent peer identity verification. Share invites only with trusted recipients. A TURN relay, when configured, forwards encrypted WebRTC packets.
+Browser artifacts stay in ignored `test-results/`. Run `npm run docs:screenshots` to regenerate the sample screenshots. After changing the hash dependency, run `npm run build:crypto` and commit the generated bundle and license.
 
-## Practical limits
+## Direction
 
-- Six devices per room by default (configurable from two to eight with MAX_ROOM_PEERS). Files go only to checked recipients; messages go to every connected device. Group sending creates a separate upload per recipient and uses more sender bandwidth. This is a bounded mesh, not a broadcast CDN.
-- No default 256 MiB or 500-file transfer cap. The wire format allows up to 2^32-1 chunks of 60 KiB; browsers impose much smaller practical storage and file limits. Hosts may lower `MAX_FILE_SIZE`. Supported desktop browsers stream saved files and ZIP64 archives to disk. Browsers with service workers and transferable streams use their download manager without a whole-file Blob. The 256 MiB memory fallback applies only when neither streaming route works. This is not an unlimited-size guarantee.
-- Both devices must remain online with Mystic open. Resume preserves committed receiver chunks, but the sender must reselect the original file after a refresh. Device IDs, resume credentials and local chunks must still exist. Clearing either profile or changing the original prevents that resume.
-- Folder pickers with directory-handle support and drag-and-drop entries preserve empty folders. A plain directory input may omit them; New empty folder adds a marker explicitly. Available disk/quota still bounds receiving; huge exports need a browser with either streaming save route.
-- Strict corporate, cellular or symmetric NAT networks may require a TURN relay. Optional TURN_URLS/TURN_SECRET configuration issues expiring coturn REST credentials without exposing the shared secret; it does not provision a relay. The default public STUN service does not guarantee connectivity.
-- Rooms are kept in process memory. Restarting the server loses waiting rooms. Established peer sessions can continue if the signaling connection is lost. Use one signaling instance unless shared room routing is implemented.
+Mystic focuses on **recoverable folder handoffs and user-owned encrypted storage**. Direct browser sharing is an established category; projects such as [PairDrop](https://github.com/schlagmichdoch/PairDrop) already do it well. We aim to make handing over a complete project and recovering it later straightforward, without claiming a feature nobody else has.
 
-## Structure
+See the [roadmap](ROADMAP.md) and [product direction](PRODUCT.md). Features on the roadmap are proposals, not shipped capabilities or release promises.
 
-- `server.js`: HTTP, client configuration, health and WebSocket signaling.
-- `src/index.js`: workspace composition and session lifecycle.
-- `src/utils/TransferManager.js`: acknowledged transfer protocol and flow control.
-- `src/utils/FileLibrary.js` and `ZipDownload.js`: file organization and safe folder downloads.
-- `src/utils/HelpAssistant.js`: local command matching for Pip; no model or network calls.
-- `src/DB/`: local history and encrypted file storage.
-- `src/components/ui/`: workspace panels.
-- `src/worker/`: module worker encryption.
-- `tests/`: protocol/storage/server and browser acceptance tests.
+## License
 
-License: ISC. Repository URL retains its original name for continuity; the product is Mystic.
+[ISC](LICENSE). Third-party notices are listed in [NOTICE.md](NOTICE.md).

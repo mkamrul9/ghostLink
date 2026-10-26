@@ -7,3 +7,5 @@ docs
 .env
 .env.*
 commands.txt
+
+.cache

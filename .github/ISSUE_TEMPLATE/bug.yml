@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem using sample data.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities, use private security reporting. Never attach private files, passphrases, keys, active invites or relay credentials."
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reproducible example with synthetic files.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, OS and Mystic revision
+      placeholder: "Chrome 140, Windows 11, commit abc1234"
+    validations:
+      required: true
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Storage mode
+      options:
+        - Browser storage
+        - External local folder
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Additional evidence
+      description: Redacted errors, screenshots or network type. Do not include personal data.

@@ -297,7 +297,7 @@ input[type="checkbox"] { width: 17px; height: 17px; flex: 0 0 17px; accent-color
 .security-actions .btn { white-space:normal; text-align:left; }
 .show-more { margin:12px 0; }
 
-.room-recipients { margin-bottom:24px; padding-bottom:20px; border-bottom:1px solid var(--border); }
+.room-recipients { margin:0; padding:20px 24px; border-bottom:1px solid var(--border); }
 .recipient-options { display:flex; flex-wrap:wrap; gap:10px; }
 .recipient-option { display:flex; align-items:center; gap:9px; border:1px solid var(--border); border-radius:12px; padding:10px 12px; min-height:44px; max-width:100%; cursor:pointer; }
 .recipient-option span { overflow-wrap:anywhere; min-width:0; }
@@ -310,3 +310,5 @@ input[type="checkbox"] { width: 17px; height: 17px; flex: 0 0 17px; accent-color
 .storage-panel { padding-bottom:12px; margin-bottom:20px; border-bottom:1px solid var(--border); }
 .storage-panel h3 { font-size:16px; margin-bottom:10px; }
 .storage-panel p { overflow-wrap:anywhere; }
+
+@media (max-width:760px) { .room-recipients { padding:18px; } }
