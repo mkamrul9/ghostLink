@@ -1,9 +1,10 @@
+import { browserOptions } from './browser-runtime.js';
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createApp } from '../server.js';
 const app=createApp({iceServers:[]});await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
-const base=`http://127.0.0.1:${app.server.address().port}`, browser=await chromium.launch({headless:true,channel:process.env.BROWSER_CHANNEL || undefined}), errors=[];
+const base=`http://127.0.0.1:${app.server.address().port}`, browser=await chromium.launch(await browserOptions()), errors=[];
 const view=(page,name)=>page.locator('.nav-list').getByRole('button',{name,exact:true}).click();
 async function device(name,width=1280){const context=await browser.newContext({viewport:{width,height:900}});await context.addInitScript(name=>{localStorage.setItem('mystic_username',name);window.showSaveFilePicker=undefined;window.showDirectoryPicker=undefined;},name);const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));await page.goto(base);await page.waitForFunction(()=>!document.querySelector('[data-action="create"]').disabled);return page;}
 async function saved(page){return page.evaluate(async()=>{const request=indexedDB.open('GhostLinkVault');return new Promise(resolve=>{request.onsuccess=()=>{const db=request.result,read=db.transaction('metadata').objectStore('metadata').getAll();read.onsuccess=()=>{resolve(read.result.map(({fileName,sha256,complete})=>({fileName,sha256,complete})));db.close();};};});});}

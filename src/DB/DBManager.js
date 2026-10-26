@@ -1,11 +1,32 @@
+import LocalFolderLibrary from '../utils/LocalFolderLibrary.js';
 import { unpackEncryptedChunk } from '../utils/BinaryPacker.js';
 import { decryptChunk } from '../utils/CryptoVault.js';
 import { sha256 } from '../vendor/sha256.js';
 import { hex, utf8, passwordKey, sealBytes, openBytes, serializeMetadata, deserializeMetadata } from '../utils/LocalCrypto.js';
 const MEMORY_DOWNLOAD_LIMIT = 256 * 1024 * 1024;
 export default class DBManager {
-    constructor() { this.dbName = 'GhostLinkVault'; this.db = null; this.protection = null; this.unlockKey = null; }
-    get locked() { return Boolean(this.protection && !this.unlockKey); }
+    constructor() { this.dbName = 'GhostLinkVault'; this.db = null; this.browserProtection = null; this.library = null; this.unlockKey = null; }
+    get protection() { return this.library ? this.library.protection : this.browserProtection; }
+    set protection(value) { this.browserProtection=value; }
+    get locked() { return this.library ? this.library.locked : Boolean(this.browserProtection && !this.unlockKey); }
+    get storageKind() { return this.library ? 'folder' : 'browser'; }
+    async attachLibrary(library,remember=true) {
+        this.library?.lock();this.unlockKey=null;this.library=library;
+        if(remember) { try { await this.transaction(['config'],'readwrite',tx=>tx.objectStore('config').put({id:'local-folder',handle:library.directory,name:library.directory.name})); }catch { /* Some browsers cannot remember folder permissions. Reopen manually. */ } }
+        if(!library.locked)await this.cleanupImports();
+    }
+    async rememberedLibrary() { return this.transaction(['config'],'readonly',tx=>tx.objectStore('config').get('local-folder')); }
+    async reconnectLibrary() {
+        const saved=await this.rememberedLibrary();if(!saved)throw new Error('Choose your local library folder again.');
+        const permission=await saved.handle.requestPermission({mode:'readwrite'});if(permission!=='granted')throw new Error('Allow folder access to open your local library.');
+        this.library=await LocalFolderLibrary.open(saved.handle);
+    }
+    async useBrowserStorage() { this.library?.lock();this.library=null;this.unlockKey=null;await this.transaction(['config'],'readwrite',tx=>tx.objectStore('config').delete('local-folder')); }
+    async checkCapacity(bytes) {
+        this.requireUnlocked();if(this.library)return;
+        const estimate=await navigator.storage?.estimate?.();
+        if(estimate?.quota && estimate.quota-(estimate.usage||0)<bytes*1.08)throw new Error('Not enough browser storage. Choose a local folder in Settings on desktop Chrome or Edge, or free browser space.');
+    }
     init() {
         if (this.opening) return this.opening;
         this.opening = this.acquireTabLock().then(() => new Promise((resolve, reject) => {
@@ -37,7 +58,7 @@ export default class DBManager {
             }).catch(reject);
         });
     }
-    close() { this.db?.close(); this.releaseTabLock?.(); }
+    close() { this.library?.lock();this.unlockKey=null;this.db?.close(); this.releaseTabLock?.(); }
     transaction(stores, mode, action) {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('Local file storage is unavailable.'));
@@ -61,14 +82,15 @@ export default class DBManager {
         if (!this.unlockKey) throw new Error('Unlock your received files first.');
         return deserializeMetadata(JSON.parse(new TextDecoder().decode(await openBytes(this.unlockKey, record.sealed, `${store}:${record[keyName]}`))));
     }
-    async saveMetadata(metadata) { this.requireUnlocked(); const record = await this.encode(metadata, 'metadata', 'fileId'); return this.transaction(['metadata'], 'readwrite', tx => tx.objectStore('metadata').put(record)); }
-    async getMetadata(id) { this.requireUnlocked(); return this.decode(await this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').get(id)), 'metadata', 'fileId'); }
-    async getAllMetadata(includeImports = false) { this.requireUnlocked(); const records = await this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').getAll()); const decoded = await Promise.all(records.map(record => this.decode(record, 'metadata', 'fileId'))); return includeImports ? decoded : decoded.filter(record => !record.importing); }
-    async getOutgoing(id) { this.requireUnlocked(); return this.decode(await this.transaction(['outgoing'], 'readonly', tx => tx.objectStore('outgoing').get(id)), 'outgoing', 'id'); }
-    deleteOutgoing(id) { return this.transaction(['outgoing'], 'readwrite', tx => tx.objectStore('outgoing').delete(id)); }
-    async saveOutgoing(metadata) { this.requireUnlocked(); const record = await this.encode(metadata, 'outgoing', 'id'); return this.transaction(['outgoing'], 'readwrite', tx => tx.objectStore('outgoing').put(record)); }
-    saveChunk(fileId, chunkIndex, packet) { this.requireUnlocked(); return this.transaction(['chunks'], 'readwrite', tx => tx.objectStore('chunks').put({ id: `${fileId}_${chunkIndex}`, fileId, chunkIndex, data: packet })); }
+    async saveMetadata(metadata) { if(this.library)return this.library.saveRecord('metadata',metadata); this.requireUnlocked(); const record = await this.encode(metadata, 'metadata', 'fileId'); return this.transaction(['metadata'], 'readwrite', tx => tx.objectStore('metadata').put(record)); }
+    async getMetadata(id) { if(this.library)return this.library.getRecord('metadata',id); this.requireUnlocked(); return this.decode(await this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').get(id)), 'metadata', 'fileId'); }
+    async getAllMetadata(includeImports = false) { if(this.library)return this.library.getAllMetadata(includeImports); this.requireUnlocked(); const records = await this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').getAll()); const decoded = await Promise.all(records.map(record => this.decode(record, 'metadata', 'fileId'))); return includeImports ? decoded : decoded.filter(record => !record.importing); }
+    async getOutgoing(id) { if(this.library)return this.library.getRecord('outgoing',id); this.requireUnlocked(); return this.decode(await this.transaction(['outgoing'], 'readonly', tx => tx.objectStore('outgoing').get(id)), 'outgoing', 'id'); }
+    deleteOutgoing(id) { if(this.library)return this.library.deleteRecord('outgoing',id); return this.transaction(['outgoing'], 'readwrite', tx => tx.objectStore('outgoing').delete(id)); }
+    async saveOutgoing(metadata) { if(this.library)return this.library.saveRecord('outgoing',metadata); this.requireUnlocked(); const record = await this.encode(metadata, 'outgoing', 'id'); return this.transaction(['outgoing'], 'readwrite', tx => tx.objectStore('outgoing').put(record)); }
+    saveChunk(fileId, chunkIndex, packet) { if(this.library)return this.library.saveChunk(fileId,chunkIndex,packet); this.requireUnlocked(); return this.transaction(['chunks'], 'readwrite', tx => tx.objectStore('chunks').put({ id: `${fileId}_${chunkIndex}`, fileId, chunkIndex, data: packet })); }
     async saveReceivedChunk(metadata, index, packet) {
+        if(this.library)return this.library.saveReceivedChunk(metadata,index,packet);
         this.requireUnlocked();
         const record = await this.encode(metadata, 'metadata', 'fileId');
         return this.transaction(['metadata', 'chunks'], 'readwrite', tx => {
@@ -76,10 +98,11 @@ export default class DBManager {
             tx.objectStore('metadata').put(record);
         });
     }
-    getChunk(fileId, index) { this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').get(`${fileId}_${index}`)); }
-    getChunks(fileId, first, count) { this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => Array.from({ length: count }, (_, offset) => tx.objectStore('chunks').get(`${fileId}_${first + offset}`))); }
-    getSavedChunkCount(id) { this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').index('fileId').count(id)); }
+    getChunk(fileId, index) { if(this.library)return this.library.getChunk(fileId,index); this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').get(`${fileId}_${index}`)); }
+    getChunks(fileId, first, count) { if(this.library)return this.library.getChunks(fileId,first,count); this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => Array.from({ length: count }, (_, offset) => tx.objectStore('chunks').get(`${fileId}_${first + offset}`))); }
+    getSavedChunkCount(id) { if(this.library)return this.library.getSavedChunkCount(id); this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').index('fileId').count(id)); }
     deleteFile(fileId) {
+        if(this.library)return this.library.deleteFile(fileId);
         this.requireUnlocked();
         return this.transaction(['metadata', 'chunks'], 'readwrite', tx => {
             tx.objectStore('metadata').delete(fileId);
@@ -113,6 +136,7 @@ export default class DBManager {
         return { blob: new Blob(chunks, { type: metadata.mimeType }), name: metadata.fileName };
     }
     async protect(password) {
+        if(this.library)return this.library.protect(password);
         this.requireUnlocked();
         if (password.length < 12) throw new Error('Use a passphrase with at least 12 characters.');
         const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -131,6 +155,7 @@ export default class DBManager {
         this.protection = protection; this.unlockKey = key;
     }
     async unlock(password) {
+        if(this.library){await this.library.unlock(password);await this.cleanupImports();return;}
         if (!this.protection) return;
         const key = await passwordKey(password, new Uint8Array(this.protection.salt), this.protection.iterations);
         try { if (new TextDecoder().decode(await openBytes(key, this.protection.check, 'mystic-vault-check-v1')) !== 'Mystic local vault v1') throw new Error(); }
@@ -138,5 +163,5 @@ export default class DBManager {
         this.unlockKey = key; await this.cleanupImports();
     }
     async cleanupImports() { for (const metadata of await this.getAllMetadata(true)) if (metadata.importing) await this.deleteFile(metadata.fileId); }
-    lock() { if (this.protection) this.unlockKey = null; }
+    lock() { if(this.library){this.library.lock();return;} if (this.protection) this.unlockKey = null; }
 }

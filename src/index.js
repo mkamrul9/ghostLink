@@ -28,6 +28,9 @@ import { createZipStream } from './utils/ZipDownload.js';
 import { saveStream, saveFolderToDevice, activeSaves } from './utils/SaveToDevice.js';
 import { backupStream, restoreBackup } from './utils/LocalBackup.js';
 import { prepareStreamDownloads } from './utils/StreamDownload.js';
+import { deviceIdentity } from './utils/DeviceIdentity.js';
+import LocalFolderLibrary from './utils/LocalFolderLibrary.js';
+import StoragePanel from './components/ui/StoragePanel.js';
 import SecurityPanel from './components/ui/SecurityPanel.js';
 import { textDialog } from './utils/dialogs.js';
 import { createRoomCode, normalizeRoomCode } from './utils/RoomCode.js';
@@ -35,7 +38,7 @@ import { createRoomCode, normalizeRoomCode } from './utils/RoomCode.js';
 const store = new Store({ initialState: {
     files: [], fileSelection: [], receivedSelection: [], transfers: [], chat: [], peers: [], vault: [],
     ui: { ...loadSettings(), view: ({ '/received': 'vault', '/transfers': 'transfers', '/help': 'help', '/settings': 'settings' })[location.pathname] || 'dashboard', chatOpen: false, assistantOpen: false, connectionStatus: 'idle', dataChannelStatus: 'closed', booting: true, error: '' },
-    vaultState: { protected: false, locked: false, busy: false, persistent: false },
+    vaultState: { protected: false, locked: false, busy: false, persistent: false, storageKind: 'browser', folderName: '', needsFolder: false },
     session: { roomId: '', role: 'idle', peers: 0 }
 } });
 const db = new DBManager();
@@ -60,7 +63,7 @@ const save = promise => promise.catch(() => {
     if (!persistenceWarning) { persistenceWarning = true; toast.show('Browser history could not be saved. Your live session still works.', 'warning'); }
 });
 const refreshVault = async () => {
-    store.state.vaultState = { ...store.state.vaultState, protected: Boolean(db.protection), locked: db.locked };
+    store.state.vaultState = { ...store.state.vaultState, protected: Boolean(db.protection), locked: db.locked, storageKind: db.storageKind, folderName: db.library?.directory.name || '' };
     if (db.locked) { store.state.vault = []; store.state.receivedSelection = []; return; }
     store.state.vault = (await db.getAllMetadata()).map(({ cryptoKey, ...metadata }) => metadata).sort((a, b) => b.createdAt - a.createdAt);
     store.state.receivedSelection = store.state.receivedSelection.filter(id => store.state.vault.some(file => String(file.fileId) === id));
@@ -70,6 +73,23 @@ async function securityAction(action, file) {
     try {
         await ready;
         if (store.state.vaultState.busy) return;
+        if (['folder','reconnect-folder','browser-storage'].includes(action)) {
+            if(activeTransfers() || activeSaves)throw new Error('Wait until transfers and downloads finish before changing storage.');
+            if(action==='browser-storage') { await db.useBrowserStorage();store.state.vaultState={...store.state.vaultState,needsFolder:false};await refreshVault();return; }
+            let library;
+            if(action==='reconnect-folder') { await db.reconnectLibrary();localStorage.setItem('mystic_device_id',db.library.deviceId);store.state.vaultState={...store.state.vaultState,needsFolder:false};await refreshVault();return securityAction('unlock'); }
+            if(!window.showDirectoryPicker)throw new Error('Choose a local folder with Chrome or Edge on a computer.');
+            const chosen=await window.showDirectoryPicker({mode:'readwrite'}), directory=await LocalFolderLibrary.locate(chosen);
+            let isNew=false;
+            try { library=await LocalFolderLibrary.open(directory); }catch(error){if(error.name!=='NotFoundError')throw error;isNew=true;}
+            const passphrase=await textDialog({title:isNew?'Protect local folder':'Open local folder',label:'Folder passphrase',secret:true,confirmSecret:isNew,button:isNew?'Use this folder':'Open folder',hint:'Keep this folder and its passphrase. You can reopen it after clearing browser data.',validate:value=>{if(isNew && value.length<12)throw new Error('Use at least 12 characters.');}});
+            if(passphrase===null)return;
+            if(activeTransfers() || activeSaves)throw new Error('Wait until transfers and downloads finish before changing storage.');
+            store.state.vaultState={...store.state.vaultState,busy:true};
+            if(isNew)library=await LocalFolderLibrary.create(directory,passphrase,{deviceId:deviceIdentity().id});else await library.unlock(passphrase);
+            const identityChanged=deviceIdentity().id!==library.deviceId;localStorage.setItem('mystic_device_id',library.deviceId);
+            await db.attachLibrary(library);if(identityChanged && store.state.session.roomId)await connectRoom(store.state.session.roomId);store.state.vaultState={...store.state.vaultState,needsFolder:false};await refreshVault();toast.show('Received files will stay encrypted in your chosen folder.','success');return;
+        }
         if (action === 'persist') {
             const persistent = await navigator.storage?.persist?.() || false;
             store.state.vaultState = { ...store.state.vaultState, persistent };
@@ -158,7 +178,7 @@ function writeRoomUrl(room) {
 function setupRoom(token) {
     const session = new RoomSession(signal, db, {
         iceServers: config.iceServers, refreshIce: async () => { const response = await fetch('/api/config'); if (!response.ok) throw new Error('Connection settings could not refresh.'); const latest = await response.json(); return latest.iceServers; }, maxFileSize: config.maxFileSize,
-        canReceive: () => !store.state.vaultState.busy,
+        canReceive: () => { if(store.state.vaultState.needsFolder)throw new Error('Reconnect your saved folder in Settings before receiving files.');return !store.state.vaultState.busy; },
         onAdd: addTransfer, onProgress: updateTransfer, onError: report,
         onVaultChange: refreshVault,
         onReceived: async () => { await refreshVault(); toast.show('File received. Open Received files to save it.', 'success'); },
@@ -320,7 +340,7 @@ async function libraryAction(mode, action, ids) {
                 store.state.files = store.state.files.filter(file => !ids.includes(file.mysticId));
                 store.state.fileSelection = store.state.fileSelection.filter(id => !ids.includes(id));
             } else {
-                if (!await toast.confirm(`Delete ${selected.length === 1 ? 'this file' : `${selected.length} files`} from this browser?`)) return;
+                if (!await toast.confirm(`Delete ${selected.length === 1 ? 'this file' : `${selected.length} files`} from the current storage?`)) return;
                 selected.forEach(entry => transfers?.cancel(Number(entry.id)));
                 await rtc?.incoming;
                 await Promise.all(selected.map(entry => db.deleteFile(Number(entry.id))));
@@ -377,6 +397,7 @@ mount(SettingsPanel, 'settings-slot', { onSave: (name, serverUrl) => {
         ui({ username, signalUrl }); rtc?.updateProfile(username); toast.show('Settings saved.', 'success');
     } catch (error) { report(error); }
 } });
+mount(StoragePanel, 'storage-slot', { onAction: securityAction });
 mount(SecurityPanel, 'security-slot', { onAction: securityAction });
 mount(HelpPanel, 'help-slot', { onTutorial: tutorial, onAssistant: openAssistant });
 mount(AssistantPanel, 'assistant-slot', { onToggle: () => ui({ assistantOpen: !store.state.ui.assistantOpen, chatOpen: false }), onAction: action => {
@@ -392,7 +413,7 @@ mount(AssistantPanel, 'assistant-slot', { onToggle: () => ui({ assistantOpen: !s
 } });
 const ready = (async () => {
     const results = await Promise.allSettled([
-        db.init().then(async () => { await refreshVault(); store.state.vaultState = { ...store.state.vaultState, persistent: await navigator.storage?.persisted?.() || false }; }),
+        db.init().then(async () => { const remembered=await db.rememberedLibrary();if(remembered){if(await remembered.handle.queryPermission({mode:'readwrite'})==='granted'){await db.attachLibrary(await LocalFolderLibrary.open(remembered.handle),false);localStorage.setItem('mystic_device_id',db.library.deviceId);}else store.state.vaultState={...store.state.vaultState,needsFolder:true};} await refreshVault(); store.state.vaultState = { ...store.state.vaultState, persistent: await navigator.storage?.persisted?.() || false }; }),
         historyDb.init().then(async () => {
             const [chat, savedTransfers, peers] = await Promise.all([historyDb.loadChat(200), historyDb.loadTransfers(200), historyDb.loadPeers()]);
             store.state.chat = chat;

@@ -1,9 +1,10 @@
+import { browserOptions } from './browser-runtime.js';
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createApp } from '../server.js';
 const app = createApp({ iceServers: [] }); await new Promise(resolve => app.server.listen(0,'127.0.0.1',resolve));
-const base = `http://127.0.0.1:${app.server.address().port}`, browser = await chromium.launch({ headless:true, channel:process.env.BROWSER_CHANNEL || undefined });
+const base = `http://127.0.0.1:${app.server.address().port}`, browser = await chromium.launch(await browserOptions());
 const errors = [], contexts = [];
 async function device(width = 1280, clock = false) {
  const context = await browser.newContext({ viewport:{width,height:900}, acceptDownloads:true }); contexts.push(context);

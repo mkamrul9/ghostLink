@@ -1,3 +1,4 @@
+import { browserOptions } from './browser-runtime.js';
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { createApp } from '../server.js';
 const app = createApp({ iceServers: [] });
 await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${app.server.address().port}`;
-const browser = await chromium.launch({ headless: true, channel: process.env.BROWSER_CHANNEL || undefined });
+const browser = await chromium.launch(await browserOptions());
 await mkdir('test-results/mobile', { recursive: true });
 const errors = [];
 async function noOverflow(page) {

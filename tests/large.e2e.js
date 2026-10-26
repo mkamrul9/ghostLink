@@ -1,10 +1,11 @@
+import { browserOptions } from './browser-runtime.js';
 import { chromium } from 'playwright';
 import { createReadStream } from 'node:fs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createApp } from '../server.js';
 const app=createApp({iceServers:[]});await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
-const browser=await chromium.launch({headless:true,channel:process.env.BROWSER_CHANNEL || undefined}),base=`http://127.0.0.1:${app.server.address().port}`,errors=[];
+const browser=await chromium.launch(await browserOptions()),base=`http://127.0.0.1:${app.server.address().port}`,errors=[];
 let serverDownloads=0;app.server.on('request',req=>{if(req.url.startsWith('/local-download/'))serverDownloads++;});
 const size=280*1024**2, seed=Buffer.alloc(1024**2,73),hash=createHash('sha256');for(let i=0;i<280;i++)hash.update(seed);const expected=hash.digest('hex');
 try{
@@ -25,4 +26,4 @@ try{
  assert.equal(downloadedBytes,size);assert.equal(downloadedHash.digest('hex'),expected);assert.equal(await download.failure(),null);assert.equal(serverDownloads,0);
  assert.equal(await receiver.evaluate(async()=>{const response=await fetch(`/local-download/${crypto.randomUUID()}`);return response.status;}),404);assert.equal(serverDownloads,0);
  assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'PASS',bytes:size,sha256:expected,transferMs:Date.now()-started,scope:'280 MiB over real local WebRTC and IndexedDB, then native and browser-owned streaming exports; not an internet throughput benchmark.'}));
-}finally{await browser.close();await app.close();}
+}catch(error){for(const context of browser.contexts())for(const page of context.pages())console.error((await page.locator('body').innerText()).slice(-2000));console.error(errors);throw error;}finally{await browser.close();await app.close();}

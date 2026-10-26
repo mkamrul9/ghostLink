@@ -131,8 +131,7 @@ export default class TransferManager {
                     if (existing.identity !== message.identity || existing.fileSize !== message.fileSize || existing.chunkSize !== chunkSize || existing.keyId !== keyId) throw new Error('Resume information does not match the saved file.');
                     metadata = existing;
                 } else {
-                    const estimate = await navigator.storage?.estimate?.();
-                    if (estimate?.quota && estimate.quota - (estimate.usage || 0) < message.fileSize * 1.08) throw new Error('Not enough storage on this device. Free space or choose fewer files.');
+                    await this.db.checkCapacity?.(message.fileSize);
                     metadata = { fileId: id, fileName: message.fileName.replace(/[\\/\x00-\x1f]/g, '_'), relativePath, fileSize: message.fileSize, mimeType: String(message.mimeType || 'application/octet-stream').slice(0, 120), totalChunks: message.totalChunks, chunkSize, cryptoKey: await importKeyFromRaw(raw), keyId, complete: false, nextChunk: 0, protocol: message.protocol || 1, resumeToken: message.resumeToken || null, identity: message.identity || null, kind: message.kind === 'directory' ? 'directory' : 'file', createdAt: Date.now() };
                     await this.db.saveMetadata(metadata);
                 }
