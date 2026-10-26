@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { unzipSync, strFromU8 } from 'fflate';
 import { createApp } from '../server.js';
-const app = createApp({ iceServers: [] });
+const app = createApp({ iceServers: [], maxRoomPeers: 2 });
 await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${app.server.address().port}`;
 const browser = await chromium.launch({ headless: true, channel: process.env.BROWSER_CHANNEL || undefined });
@@ -75,7 +75,7 @@ try {
     await guest.getByText(message, { exact: true }).waitFor();
     assert.equal(await guest.getByLabel('Message', { exact: true }).inputValue(), 'keep this draft');
     assert.equal(await guest.evaluate(() => window.__xss), undefined);
-    await guest.getByText('Morgan <Studio>', { exact: true }).waitFor();
+    await guest.getByRole('log', {name:'Messages'}).getByText('Morgan <Studio>', { exact: true }).waitFor();
     await host.getByRole('button', { name: 'Close messages' }).click();
     await guest.getByRole('button', { name: 'Close messages' }).click();
     console.log('PASS: simpler messages drawer, name settings, preserved drafts and safe text');

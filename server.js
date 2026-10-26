@@ -1,4 +1,6 @@
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { turnCredentials } from './scripts/turn-credentials.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -12,9 +14,13 @@ export function createApp(options = {}) {
     const rooms = new Map();
     const iceServers = options.iceServers ?? JSON.parse(process.env.ICE_SERVERS || JSON.stringify(defaultIceServers));
     if (!Array.isArray(iceServers)) throw new Error('ICE_SERVERS must be a JSON array.');
+    const turn = options.turn ?? (process.env.TURN_URLS ? {urls:JSON.parse(process.env.TURN_URLS),secret:process.env.TURN_SECRET,ttl:Number(process.env.TURN_TTL || 3600)} : null);
+    if (turn) turnCredentials(turn);
     const maxClients = options.maxClients ?? Number(process.env.MAX_CLIENTS || 10000);
     const maxFileSize = options.maxFileSize ?? Number(process.env.MAX_FILE_SIZE || Number.MAX_SAFE_INTEGER);
     if (!Number.isSafeInteger(maxClients) || maxClients < 1 || !Number.isSafeInteger(maxFileSize) || maxFileSize < 1) throw new Error('MAX_CLIENTS and MAX_FILE_SIZE must be positive integers.');
+    const maxRoomPeers = options.maxRoomPeers ?? Number(process.env.MAX_ROOM_PEERS || 6);
+    if (!Number.isInteger(maxRoomPeers) || maxRoomPeers < 2 || maxRoomPeers > 8) throw new Error('MAX_ROOM_PEERS must be from 2 to 8.');
     const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(origin => origin.trim()).filter(Boolean);
     const server = http.createServer(async (req, res) => {
         const headers = {
@@ -34,7 +40,8 @@ export function createApp(options = {}) {
             if (url.pathname === '/healthz') return respond(200, JSON.stringify({ status: 'ok', connections: wss.clients.size, rooms: rooms.size }));
             if (url.pathname === '/api/config') {
                 headers['Cache-Control'] = 'no-store';
-                return respond(200, JSON.stringify({ iceServers, maxFileSize }));
+                const relay = turn ? turnCredentials(turn) : null;
+                return respond(200, JSON.stringify({ iceServers: relay ? [...iceServers, relay.server] : iceServers, iceExpiresAt:relay?.expiresAt || null, maxFileSize, maxRoomPeers }));
             }
             let requested = decodeURIComponent(url.pathname);
             if (requested.startsWith('/src/')) requested = requested.slice(4);
@@ -62,7 +69,7 @@ export function createApp(options = {}) {
         if (!ws.roomId) return;
         const members = rooms.get(ws.roomId);
         members?.delete(ws);
-        members?.forEach(peer => send(peer, { type: 'PEER_LEFT' }));
+        members?.forEach(peer => send(peer, { type: 'PEER_LEFT', peerId: ws.peerId }));
         if (!members?.size) rooms.delete(ws.roomId);
         ws.roomId = null;
     };
@@ -77,6 +84,7 @@ export function createApp(options = {}) {
         wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws));
     });
     wss.on('connection', ws => {
+        ws.peerId = randomUUID();
         ws.alive = true;
         ws.tokens = 120;
         ws.refilledAt = Date.now();
@@ -95,15 +103,15 @@ export function createApp(options = {}) {
                 if (typeof data.roomId !== 'string' || !/^[a-zA-Z0-9_-]{8,64}$/.test(data.roomId)) return send(ws, { type: 'ERROR', message: 'Use a room code with 8-64 letters, numbers, dashes or underscores.' });
                 if (ws.roomId === data.roomId) return;
                 const members = rooms.get(data.roomId) || new Set();
-                if (members.size >= 2) return send(ws, { type: 'ERROR', message: 'This room already has two devices.' });
+                if (members.size >= maxRoomPeers) return send(ws, { type: 'ERROR', message: maxRoomPeers === 2 ? 'This room already has two devices.' : `This room is full (${maxRoomPeers} devices).` });
                 leave(ws);
                 ws.roomId = data.roomId;
                 const initiator = members.size === 0;
                 members.add(ws);
                 rooms.set(data.roomId, members);
                 clearTimeout(joinTimer);
-                send(ws, { type: 'JOINED', initiator, peers: members.size - 1 });
-                members.forEach(peer => { if (peer !== ws) send(peer, { type: 'PEER_JOINED' }); });
+                send(ws, { type: 'JOINED', initiator, peers: members.size - 1, peerId: ws.peerId, members: [...members].filter(peer => peer !== ws).map(peer => ({ id: peer.peerId })) });
+                members.forEach(peer => { if (peer !== ws) send(peer, { type: 'PEER_JOINED', peerId: ws.peerId }); });
                 return;
             }
             // File contents, names and encryption keys are never accepted by the relay.
@@ -112,7 +120,9 @@ export function createApp(options = {}) {
                 ? { type: data.type, candidate: data.candidate }
                 : { type: data.type, sdp: data.sdp };
             if (data.type !== 'ICE_CANDIDATE' && (typeof data.sdp?.sdp !== 'string' || data.sdp.type !== data.type.toLowerCase())) return;
-            rooms.get(ws.roomId)?.forEach(peer => { if (peer !== ws) send(peer, relay); });
+            const peers = [...(rooms.get(ws.roomId) || [])].filter(peer => peer !== ws);
+            const target = data.to ? peers.find(peer => peer.peerId === data.to) : peers.length === 1 ? peers[0] : null;
+            if (target) send(target, { ...relay, from: ws.peerId });
         });
         ws.on('close', () => { clearTimeout(joinTimer); leave(ws); });
     });

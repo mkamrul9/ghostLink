@@ -21,9 +21,14 @@ Render's free plan currently sleeps after 15 minutes without inbound HTTP or Web
 - `PORT`: server port; defaults to 8080. Render sets this itself.
 - `HOST`: bind address; defaults to 0.0.0.0.
 - `MAX_CLIENTS`: maximum simultaneous signaling sockets. Defaults to 10,000 as a protective ceiling, not a tested hosting capacity.
+- `MAX_ROOM_PEERS`: devices per room, from 2 to 8; defaults to 6. Small mesh rooms bound sender upload and browser peer-connection count.
 - `MAX_FILE_SIZE`: per-file byte limit presented to browsers; defaults to Number.MAX_SAFE_INTEGER (no product size cap). Device storage and browser save capabilities still limit real transfers. Set a smaller byte value if needed.
 - `ALLOWED_ORIGINS`: optional comma-separated client origins. Same-origin clients are already allowed.
 - `ICE_SERVERS`: JSON array in the RTCPeerConnection format. Defaults to Google's public STUN server. Add a TURN provider for restrictive networks. TURN usernames and credentials are visible to browsers; use scoped, short-lived credentials and rotate them through your provider. Never commit credentials to the repository.
+
+Optional coturn REST authentication: set `TURN_URLS` to a JSON array of relay URLs and `TURN_SECRET` to the relay's shared secret (at least 32 random characters). `TURN_TTL` defaults to 3600 seconds, from 300 to 86400. The API returns a unique expiring username and HMAC-SHA1 credential, never the shared secret. Clients refresh credentials when establishing each peer connection. This follows coturn's REST credential format: https://github.com/coturn/coturn/blob/master/README.turnserver. The relay itself must be provisioned separately with matching `use-auth-secret` / `static-auth-secret`, TLS, appropriate network ports, allocation/bandwidth quotas, and protection from credential-endpoint abuse at the edge. Keep credentials out of source control. No relay is enabled in the free blueprint.
+
+A TURN relay forwards encrypted network packets when direct connections fail; it does not store files. Leaving TURN unset keeps only direct WebRTC/STUN connectivity, and some networks will fail to connect. Free signaling hosting cannot remove those network restrictions.
 
 Configure variables in the host dashboard. For local `.env` files, use `node --env-file=.env server.js`; `npm start` does not automatically read `.env`.
 

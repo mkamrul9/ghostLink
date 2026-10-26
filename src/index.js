@@ -15,8 +15,8 @@ import ToastNotification from './components/ui/ToastNotification.js';
 import DBManager from './DB/DBManager.js';
 import HistoryDB from './DB/HistoryDB.js';
 import SignalingChannel from './utils/SignalingChannel.js';
-import WebRTCConnection from './utils/WebRTCConnection.js';
-import TransferManager from './utils/TransferManager.js';
+import RoomSession from './utils/RoomSession.js';
+import RoomMembers from './components/ui/RoomMembers.js';
 import { loadSettings, validateSignalUrl } from './utils/settings.js';
 import { downloadBlob, formatBytes } from './utils/format.js';
 import HelpPanel from './components/ui/HelpPanel.js';
@@ -51,6 +51,8 @@ let reconnectAttempt = 0;
 let retryFiles = new Map();
 let progressTicks = new Map();
 let persistenceWarning = false;
+let selectedInitialPeer = false;
+let recipientDevices = new Set();
 const ui = patch => { store.state.ui = { ...store.state.ui, ...patch }; };
 const report = error => { if (error.name !== 'AbortError') toast.show(error.message || String(error), 'error'); };
 const save = promise => promise.catch(() => {
@@ -99,7 +101,7 @@ async function securityAction(action, file) {
     finally { store.state.vaultState = { ...store.state.vaultState, busy: false }; }
 }
 const addTransfer = (transfer, file) => {
-    if (file) retryFiles.set(transfer.id, file);
+    if (file) retryFiles.set(transfer.id, {file, deviceId:transfer.remoteDeviceId});
     store.state.transfers = trimTransferHistory([...store.state.transfers.filter(item => item.id !== transfer.id), transfer]);
     save(historyDb.saveTransfer(transfer));
 };
@@ -127,11 +129,12 @@ function teardown() {
     generation++;
     clearTimeout(handshakeTimer);
     clearTimeout(reconnectTimer);
-    transfers?.close();
     rtc?.close();
+    selectedInitialPeer = false;
+    recipientDevices.clear();
     signal?.close();
     transfers = rtc = signal = null;
-    store.state.session = { ...store.state.session, peers: 0 };
+    store.state.session = { ...store.state.session, peers: 0, members: [], recipientIds: [] };
     ui({ dataChannelStatus: 'closed' });
 }
 function roomFromInput(value) {
@@ -150,58 +153,26 @@ function writeRoomUrl(room) {
     url.hash = room ? new URLSearchParams({ room }).toString() : '';
     history.replaceState(null, '', url);
 }
-function startHandshakeTimeout(token) {
-    clearTimeout(handshakeTimer);
-    handshakeTimer = setTimeout(() => {
-        if (token !== generation || rtc?.dataChannel?.readyState === 'open') return;
-        ui({ connectionStatus: 'failed', error: 'The devices could not connect. Retry, or try a different network.' });
-    }, 35000);
-}
-function setupRtc(initiator, token) {
-    const currentSignal = signal;
-    const currentRtc = new WebRTCConnection(currentSignal, initiator, config.iceServers);
-    rtc = currentRtc;
-    const isCurrent = () => token === generation && rtc === currentRtc;
-    transfers = new TransferManager(currentRtc, db, {
-        maxFileSize: config.maxFileSize,
+function setupRoom(token) {
+    const session = new RoomSession(signal, db, {
+        iceServers: config.iceServers, refreshIce: async () => { const response = await fetch('/api/config'); if (!response.ok) throw new Error('Connection settings could not refresh.'); const latest = await response.json(); return latest.iceServers; }, maxFileSize: config.maxFileSize,
         canReceive: () => !store.state.vaultState.busy,
-        onAdd: addTransfer,
-        onProgress: updateTransfer,
-        onError: error => { if (isCurrent()) report(error); },
+        onAdd: addTransfer, onProgress: updateTransfer, onError: report,
         onVaultChange: refreshVault,
-        onReceived: async () => { await refreshVault(); toast.show('File received. Open Received files to download it.', 'success'); }
+        onReceived: async () => { await refreshVault(); toast.show('File received. Open Received files to save it.', 'success'); },
+        onPeers: members => {
+            if (token !== generation) return;
+            const connected = members.filter(peer => peer.connected);
+            let recipientIds = connected.filter(peer => recipientDevices.has(peer.deviceId)).map(peer => peer.id);
+            if (!selectedInitialPeer && connected.length) { recipientIds = [connected[0].id]; recipientDevices.add(connected[0].deviceId); selectedInitialPeer = true; }
+            store.state.session = { ...store.state.session, members, recipientIds, peers: connected.length };
+            ui({ connectionStatus: connected.length ? 'connected' : members.some(peer => !peer.failed) ? 'connecting' : members.length ? 'disconnected' : 'waiting', dataChannelStatus: connected.length ? 'open' : 'closed', error: !connected.length && members.some(peer => peer.failed) ? 'A device disconnected. Choose Try again to reconnect.' : '' });
+            updatePeer(connected.length ? 'online' : 'offline');
+        },
+        onChat: message => addChat({ id: crypto.randomUUID(), text: message.text, author: message.author, ts: Date.now(), origin: 'peer', roomId: store.state.session.roomId })
     });
-    currentRtc.onDataChannelOpen = () => {
-        if (!isCurrent()) return;
-        clearTimeout(handshakeTimer);
-        reconnectAttempt = 0;
-        ui({ connectionStatus: 'connected', dataChannelStatus: 'open', error: '' });
-        store.state.session = { ...store.state.session, peers: 1 };
-        updatePeer('online');
-        toast.show('The other device is connected.', 'success');
-    };
-    currentRtc.onDataChannelClose = () => {
-        if (!isCurrent()) return;
-        transfers?.close();
-        ui({ connectionStatus: 'disconnected', dataChannelStatus: 'closed', error: 'The other device disconnected. Choose Try again.' });
-        store.state.session = { ...store.state.session, peers: 0 };
-        updatePeer('offline');
-    };
-    currentRtc.onConnectionStateChange = status => {
-        if (!isCurrent()) return;
-        if (status === 'failed') {
-            transfers?.close();
-            ui({ connectionStatus: 'failed', dataChannelStatus: 'closed', error: 'The devices lost their connection. Try again or use another network.' });
-            store.state.session = { ...store.state.session, peers: 0 };
-            updatePeer('offline');
-        }
-    };
-    currentRtc.onError = error => { if (isCurrent()) report(error); };
-    currentRtc.onChatMessage = message => {
-        if (!isCurrent()) return;
-        addChat({ id: crypto.randomUUID(), text: message.text, author: String(message.author || 'Peer').slice(0, 40), ts: Date.now(), origin: 'peer', roomId: store.state.session.roomId });
-    };
-    return currentRtc;
+    rtc = transfers = session;
+    return session;
 }
 async function connectRoom(input, automatic = false) {
     let token;
@@ -220,31 +191,9 @@ async function connectRoom(input, automatic = false) {
         signal = channel;
         let pending = [];
         const handle = async message => {
-            if (token !== generation) return;
+            if (token !== generation || message.type === 'JOINED') return;
             if (!rtc) { pending.push(message); return; }
-            switch (message.type) {
-                case 'PEER_JOINED':
-                    // The surviving peer initiates a fresh connection, regardless of its old role.
-                    transfers?.close(); rtc.close();
-                    setupRtc(true, token);
-                    store.state.session = { ...store.state.session, role: 'host', peers: 1 };
-                    ui({ connectionStatus: 'connecting', error: '' });
-                    startHandshakeTimeout(token);
-                    await rtc.createOffer();
-                    break;
-                case 'OFFER': await rtc.handleOffer(message.sdp); break;
-                case 'ANSWER': await rtc.handleAnswer(message.sdp); break;
-                case 'ICE_CANDIDATE': await rtc.handleIceCandidate(message.candidate); break;
-                case 'PEER_LEFT':
-                    transfers?.close(); rtc.close();
-                    setupRtc(true, token);
-                    store.state.session = { ...store.state.session, role: 'host', peers: 0 };
-                    ui({ connectionStatus: 'waiting', dataChannelStatus: 'closed', error: '' });
-                    clearTimeout(handshakeTimer);
-                    updatePeer('offline');
-                    toast.show('The other device left. This room is still open.', 'info');
-                    break;
-            }
+            await rtc.handle(message);
         };
         channel.onMessage(handle);
         channel.onError = error => { if (token === generation) report(error); };
@@ -260,10 +209,10 @@ async function connectRoom(input, automatic = false) {
         };
         const joined = await channel.connect(room);
         if (token !== generation) { channel.close(); return; }
-        setupRtc(joined.initiator, token);
+        setupRoom(token);
         store.state.session = { roomId: room, role: joined.initiator ? 'host' : 'guest', peers: joined.peers };
         ui({ connectionStatus: joined.peers ? 'connecting' : 'waiting', dataChannelStatus: joined.peers ? 'connecting' : 'closed' });
-        if (joined.peers) startHandshakeTimeout(token);
+        await rtc.join(joined);
         const backlog = pending; pending = [];
         for (const message of backlog) await handle(message);
     } catch (error) {
@@ -306,12 +255,14 @@ function stageIncoming(incoming) {
 function sendSelected(ids = store.state.fileSelection) {
     if (db.locked || store.state.vaultState.busy) { report(new Error('Unlock your files and finish storage tasks first.')); return false; }
     if (!transfers || rtc?.dataChannel?.readyState !== 'open') { report(new Error('Connect another device first.')); return false; }
+    const recipients = store.state.session.recipientIds || [];
+    if (!recipients.length) { report(new Error('Choose a receiving device in Send to.')); return false; }
     const chosen = store.state.files.filter(file => ids.includes(file.mysticId));
     if (!chosen.length) { toast.show('Add and select the files you want to send.', 'info'); return false; }
     const sending = new Set(chosen.map(file => file.mysticId));
     store.state.files = store.state.files.filter(file => !sending.has(file.mysticId));
     store.state.fileSelection = store.state.fileSelection.filter(id => !sending.has(id));
-    transfers.sendFiles(chosen).catch(report);
+    transfers.sendFiles(chosen, recipients).catch(report);
     changeView('transfers');
     return true;
 }
@@ -380,6 +331,7 @@ async function libraryAction(mode, action, ids) {
 const shell = new DashboardShell({ store, onView: changeView, onChat: () => ui({ chatOpen: !store.state.ui.chatOpen, assistantOpen: false }), onTutorial: tutorial });
 shell.mount(document.getElementById('app'));
 function mount(Component, slot, props = {}) { const component = new Component({ store, ...props }); component.mount(document.getElementById(slot)); return component; }
+mount(RoomMembers, 'recipients-slot', { onSelect: recipientIds => { for (const peer of store.state.session.members || []) { if (!peer.deviceId) continue; recipientIds.includes(peer.id) ? recipientDevices.add(peer.deviceId) : recipientDevices.delete(peer.deviceId); } store.state.session = { ...store.state.session, recipientIds }; } });
 const dropZone = mount(DropZone, 'drop-zone-slot', { onFiles: stageIncoming, onError: report, onEmptyFolder: async () => { const name = await textDialog({ title: 'New empty folder', label: 'Folder path', button: 'Add folder', validate: safePath }); if (name !== null) stageIncoming([directoryFile(name)]); } });
 mount(FileTree, 'file-tree-slot', { mode: 'send', onSelect: ids => { store.state.fileSelection = ids; }, onAction: (action, ids) => libraryAction('send', action, ids) });
 mount(FileTree, 'vault-slot', { mode: 'received', onSelect: ids => { store.state.receivedSelection = ids; }, onAction: (action, ids) => libraryAction('received', action, ids) });
@@ -387,7 +339,7 @@ mount(TransferQueue, 'queue-slot', {
     canRetry: id => retryFiles.has(id),
     onAction: (action, id) => {
         if (action === 'cancel') transfers?.cancel(id);
-        else if (action === 'retry') { const file = retryFiles.get(id); if (file && transfers) transfers.sendFiles([file]).catch(report); }
+        else if (action === 'retry') { const original = retryFiles.get(id); if (original && transfers) { try { transfers.retry(original.file, original.deviceId).catch(report); } catch (error) { report(error); } } }
         else if (action === 'receipt') { const item = store.state.transfers.find(entry => entry.id === id); if (item?.verified) downloadBlob(new Blob([JSON.stringify({ app: 'Mystic', version: 1, file: item.relativePath || item.name, bytes: item.size, sha256: item.sha256, verifiedAt: item.completedAt || item.updatedAt, direction: item.direction, resumedBytes: item.resumedBytes || 0, note: 'A matching checksum confirms file bytes. It does not verify who sent the file.' }, null, 2)], {type:'application/json'}), 'Mystic-file-receipt.json'); }
         else libraryAction('received', 'download', [String(id)]);
     }
@@ -419,7 +371,7 @@ mount(SettingsPanel, 'settings-slot', { onSave: (name, serverUrl) => {
         if (!username || username.length > 40) throw new Error('Use a name with 1 to 40 characters.');
         const signalUrl = validateSignalUrl(serverUrl.trim());
         localStorage.setItem('mystic_username', username); localStorage.setItem('mystic_signalUrl', signalUrl);
-        ui({ username, signalUrl }); toast.show('Settings saved.', 'success');
+        ui({ username, signalUrl }); rtc?.updateProfile(username); toast.show('Settings saved.', 'success');
     } catch (error) { report(error); }
 } });
 mount(SecurityPanel, 'security-slot', { onAction: securityAction });

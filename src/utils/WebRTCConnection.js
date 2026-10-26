@@ -15,21 +15,30 @@ export default class WebRTCConnection {
     setupDataChannel(channel) {
         this.dataChannel = channel;
         channel.binaryType = 'arraybuffer';
-        let announced = false;
-        const announce = () => { if (announced) return; announced = true; this.sendControl({ type: 'HELLO', protocol: 2, ...deviceIdentity() }); };
+        let helloTimer;
+        const announce = () => {
+            if (channel.readyState !== 'open') return;
+            this.sendControl({ type: 'HELLO', protocol: 2, ...deviceIdentity() });
+            if (!this.helloReceived) helloTimer = setTimeout(announce, 1000);
+        };
         channel.onopen = announce;
         if (channel.readyState === 'open') queueMicrotask(announce);
-        channel.onclose = () => this.onDataChannelClose?.();
+        channel.onclose = () => { clearTimeout(helloTimer); this.onDataChannelClose?.(); };
+        this.clearHello = () => clearTimeout(helloTimer);
         channel.onerror = () => this.onError?.(new Error('The peer connection encountered a network error.'));
         // Preserve wire order through asynchronous key imports and IndexedDB writes.
         channel.onmessage = ({ data }) => {
             this.incoming = this.incoming.then(async () => {
                 if (typeof data === 'string') {
                     const message = JSON.parse(data);
-                    if (message.type === 'HELLO') {
+                    if (message.type === 'HELLO' || message.type === 'HELLO_ACK') {
                         if (message.protocol !== 2 || !/^[0-9a-f-]{36}$/i.test(message.id || '')) throw new Error('Refresh both devices to use the latest transfer version.');
+                        if (this.remoteDeviceId && this.remoteDeviceId !== message.id) throw new Error('The connected device identity changed. Rejoin the room.');
+                        if (message.type === 'HELLO') this.sendControl({type:'HELLO_ACK',protocol:2,...deviceIdentity()});
+                        clearTimeout(helloTimer);
                         this.remoteDeviceId = message.id; this.remoteName = String(message.name || 'Device').slice(0, 40);
                         if (!this.helloReceived) { this.helloReceived = true; this.onDataChannelOpen?.(); }
+                    } else if (message.type === 'PROFILE') { this.remoteName = String(message.name || 'Device').slice(0,40); this.onProfile?.();
                     } else if (message.type === 'CHAT') {
                         if (typeof message.text === 'string' && message.text.length <= 500) this.onChatMessage?.(message);
                     } else await this.onControl?.(message);
@@ -62,5 +71,5 @@ export default class WebRTCConnection {
         if (this.peerConnection.remoteDescription) await this.peerConnection.addIceCandidate(candidate);
         else this.pendingCandidates.push(candidate);
     }
-    close() { this.dataChannel?.close(); this.peerConnection.close(); }
+    close() { this.clearHello?.(); this.dataChannel?.close(); this.peerConnection.close(); }
 }

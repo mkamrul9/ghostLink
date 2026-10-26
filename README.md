@@ -2,7 +2,7 @@
 
 ![Mystic](src/assets/mystic-logo.svg)
 
-Private file sharing and chat between two browsers, with a simple orange and charcoal interface. Files travel over a WebRTC data channel; the Node server serves the app and relays connection handshakes. File contents, names and AES keys never travel over the signaling connection.
+Private file sharing and chat between browsers, with a simple orange and charcoal interface. Files travel over a WebRTC data channel; the Node server serves the app and relays connection handshakes. File contents, names and AES keys never travel over the signaling connection.
 
 ## Run locally
 
@@ -16,7 +16,7 @@ npm start
 Open http://localhost:8080, create a room, and share its invite with another browser or device. For another device to use Web Crypto, serve through HTTPS. The deployment configuration serves both the client and signaling from the same origin, automatically using WSS on HTTPS.
 
 1. Create a room and share the invite. Invites contain a cryptographically random room code in the URL fragment. New room codes use 16 readable characters (80 random bits), grouped for easy copying.
-2. Connect the other device. Rooms allow two peers and either peer can send.
+2. Connect the other device. Rooms allow six devices by default. Select recipients in Send to; each device can send. New arrivals are not selected automatically.
 3. Choose or drop files and folders, then press Send.
 4. Open **Received files** to download a file or a whole folder. Folder downloads are ZIP files that preserve the folder layout.
 
@@ -34,7 +34,7 @@ Open http://localhost:8080, create a room, and share its invite with another bro
 - Private peer chat, display names, device-local preferences, history export and independent history clearing. History retains the newest 500 entries per category to bound local storage.
 - Optional passphrase protection, encrypted local backups/restore, persistent-storage requests and screen wake lock during transfers when supported.
 - Responsive, keyboard-accessible navigation, focus-preserving live updates, reduced-motion support and an original SVG logo/favicon.
-- HTTP security headers, same-origin WebSocket checks, bounded payloads and connections, per-socket message rate limits, two-peer room limits, heartbeats and a health endpoint.
+- HTTP security headers, same-origin WebSocket checks, bounded payloads and connections, per-socket message rate limits, configurable room limits and targeted signaling, heartbeats and a health endpoint.
 
 ## Verification
 
@@ -47,13 +47,13 @@ npm run test:mobile
 npm run test:load
 ```
 
-`npm run verify` runs syntax/import checks, unit/integration tests, browser acceptance tests and a responsive-layout suite. The browser suite uses separate browser profiles and compares downloaded content with the source SHA-256. ZIP paths and contents are checked with an independent ZIP reader. Mobile checks cover 320, 360, 390 and 430 pixel phones, a 768 pixel tablet, 844x390 landscape, and reduced keyboard space. These are automated viewport checks, not a claim of physical-device testing. Screenshots are written to `test-results/`. GitHub Actions runs verification for pushes and pull requests using Google Chrome already installed on the Ubuntu 24.04 runner. Locally, the suite uses Playwright Chromium by default; set `BROWSER_CHANNEL=chrome` to use an installed Google Chrome.
+`npm run verify` runs syntax/import checks, unit/integration tests, desktop, encrypted-backup/recovery, four-device group acceptance tests and a responsive-layout suite. The browser suite uses separate browser profiles and compares downloaded content with the source SHA-256. ZIP paths and contents are checked with an independent ZIP reader. Mobile checks cover 320, 360, 390 and 430 pixel phones, a 768 pixel tablet, 844x390 landscape, and reduced keyboard space. These are automated viewport checks, not a claim of physical-device testing. Screenshots are written to `test-results/`. GitHub Actions runs verification for pushes and pull requests using Google Chrome already installed on the Ubuntu 24.04 runner. Locally, the suite uses Playwright Chromium by default; set `BROWSER_CHANNEL=chrome` to use an installed Google Chrome.
 
 The load script defaults to 1,000 local WebSocket clients in 500 rooms. Set `LOAD_CLIENTS` to an even number up to 10,000. This measures signaling only, with the server and clients in the same process; it does not demonstrate production concurrency, browser throughput, TURN capacity or availability on a hosting plan.
 
 ## Deploy
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the free Render setup, Docker option, configuration and production capacity requirements. There is no build step or server-side file database.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the free Render setup, Docker option, configuration and production capacity requirements. There is no deployment build step or server-side file database. The vendored hash bundle is tracked; regenerate it with npm run build:crypto after updating its dependency.
 
 ## Storage and privacy
 
@@ -65,11 +65,11 @@ WebRTC uses DTLS for transport protection. AES file keys are exchanged inside th
 
 ## Practical limits
 
-- Two devices per room; group rooms are not implemented.
+- Six devices per room by default (configurable from two to eight with MAX_ROOM_PEERS). Files go only to checked recipients; messages go to every connected device. Group sending creates a separate upload per recipient and uses more sender bandwidth. This is a bounded mesh, not a broadcast CDN.
 - No default 256 MiB or 500-file transfer cap. The wire format allows up to 2^32-1 chunks of 60 KiB; browsers impose much smaller practical storage and file limits. Hosts may lower `MAX_FILE_SIZE`. Supported desktop browsers stream saved files and ZIP64 archives to disk. Other browsers use a 256 MiB memory-download fallback. This is not an unlimited-size guarantee.
 - Both devices must remain online with Mystic open. Resume preserves committed receiver chunks, but the sender must reselect the original file after a refresh. Device IDs, resume credentials and local chunks must still exist. Clearing either profile or changing the original prevents that resume.
 - Folder pickers with directory-handle support and drag-and-drop entries preserve empty folders. A plain directory input may omit them; New empty folder adds a marker explicitly. Available disk/quota still bounds receiving; huge exports need a browser with native saving.
-- Strict corporate, cellular or symmetric NAT networks may require a TURN relay. The default public STUN service does not guarantee connectivity.
+- Strict corporate, cellular or symmetric NAT networks may require a TURN relay. Optional TURN_URLS/TURN_SECRET configuration issues expiring coturn REST credentials without exposing the shared secret; it does not provision a relay. The default public STUN service does not guarantee connectivity.
 - Rooms are kept in process memory. Restarting the server loses waiting rooms. Established peer sessions can continue if the signaling connection is lost. Use one signaling instance unless shared room routing is implemented.
 
 ## Structure

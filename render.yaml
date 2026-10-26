@@ -13,5 +13,5 @@ services:
         value: "22"
       - key: MAX_CLIENTS
         value: "10000"
-      - key: MAX_FILE_SIZE
-        value: "268435456"
+      - key: MAX_ROOM_PEERS
+        value: "6"
