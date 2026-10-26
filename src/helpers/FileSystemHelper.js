@@ -1,3 +1,4 @@
+import { directoryFile, namedFile } from '../utils/FileLibrary.js';
 export async function parseEntry(entry, path = '') {
     if (entry.isFile) {
         const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
@@ -13,7 +14,7 @@ export async function parseEntry(entry, path = '') {
         if (!entries.length) break;
         for (const child of entries) files.push(...await parseEntry(child, `${path}${entry.name}/`));
     }
-    return files;
+    return files.length ? files : [directoryFile(path + entry.name)];
 }
 export async function handleDroppedItems(dataTransfer) {
     // Capture handles synchronously before the drag data store becomes inaccessible.
@@ -26,4 +27,13 @@ export async function handleDroppedItems(dataTransfer) {
         else if (file) files.push(file);
     }
     return files;
+}
+
+export async function readDirectoryHandle(handle, prefix = '') {
+    const path = prefix ? `${prefix}/${handle.name}` : handle.name, result = [];
+    for await (const entry of handle.values()) {
+        if (entry.kind === 'directory') result.push(...await readDirectoryHandle(entry, path));
+        else result.push(namedFile(await entry.getFile(), `${path}/${entry.name}`));
+    }
+    return result.length ? result : [directoryFile(path)];
 }

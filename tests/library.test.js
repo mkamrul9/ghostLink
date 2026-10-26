@@ -44,7 +44,7 @@ test('folder ZIP downloads are readable by an independent reader with correct pa
     assert.equal(strFromU8(restored['Holiday/caf\u00e9.txt']), 'unicode file');
     await assert.rejects(createZip([{ ...entries[0], path: '../escape.txt' }]), /not allowed/);
     await assert.rejects(createZip([entries[0], entries[0]]), /same folder path/);
-    await assert.rejects(createZip([{ ...entries[0], size: 268435457 }]), /fewer files/);
+    await assert.rejects(createZip([{ ...entries[0], size: 268435457 }]), /direct saving/);
 });
 test('helper proposes only named or selected files and never acts on a negative or ambiguous command', () => {
     const files = [

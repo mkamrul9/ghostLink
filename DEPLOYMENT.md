@@ -21,7 +21,7 @@ Render's free plan currently sleeps after 15 minutes without inbound HTTP or Web
 - `PORT`: server port; defaults to 8080. Render sets this itself.
 - `HOST`: bind address; defaults to 0.0.0.0.
 - `MAX_CLIENTS`: maximum simultaneous signaling sockets. Defaults to 10,000 as a protective ceiling, not a tested hosting capacity.
-- `MAX_FILE_SIZE`: per-file byte limit presented to browsers; defaults to 268435456 (256 MiB). Raising it increases browser download memory and quota requirements.
+- `MAX_FILE_SIZE`: per-file byte limit presented to browsers; defaults to Number.MAX_SAFE_INTEGER (no product size cap). Device storage and browser save capabilities still limit real transfers. Set a smaller byte value if needed.
 - `ALLOWED_ORIGINS`: optional comma-separated client origins. Same-origin clients are already allowed.
 - `ICE_SERVERS`: JSON array in the RTCPeerConnection format. Defaults to Google's public STUN server. Add a TURN provider for restrictive networks. TURN usernames and credentials are visible to browsers; use scoped, short-lived credentials and rotate them through your provider. Never commit credentials to the repository.
 
@@ -43,7 +43,7 @@ The image runs as a non-root user and has a `/healthz` health check. Put it behi
 - Keep this version on one signaling instance. Multiple instances need shared room routing and peer-disconnect coordination before horizontal scaling.
 - Set monitoring on `/healthz`, restarts and connection failures. Do not log SDP, room codes, file names, chat or file keys. This implementation logs only its listening port.
 - Use an always-on hosting tier for a public service with uptime expectations. Establish privacy/support policies and a browser/device compatibility matrix.
-- Review client capacity on mobile devices before increasing the 256 MiB limit. Received files and keys live only in each browser profile.
+- Test mobile storage limits and the 256 MiB memory-save fallback. Supported desktop browsers can stream larger downloads. Received files and protected keys live only in each browser profile; users can save encrypted backups locally.
 
 ## Rollback
 

@@ -26,7 +26,7 @@ test('serves the app, assets, config and health with security headers', async t 
     assert.equal(root.headers.get('x-content-type-options'), 'nosniff');
     assert.match(root.headers.get('content-security-policy'), /frame-ancestors 'none'/);
     for (const resource of ['/assets/mystic-mark.svg', '/index.js', '/styles.css', '/manifest.webmanifest', '/src/index.html', '/help', '/received', '/settings', '/transfers']) assert.equal((await fetch(app.url + resource)).status, 200, resource);
-    assert.equal((await (await fetch(app.url + '/api/config')).json()).maxFileSize, 268435456);
+    assert.equal((await (await fetch(app.url + '/api/config')).json()).maxFileSize, Number.MAX_SAFE_INTEGER);
     assert.equal((await (await fetch(app.url + '/healthz')).json()).status, 'ok');
     for (const resource of ['/.env', '/.git/config', '/server.js', '/%2e%2e%5cpackage.json', '/missing.js']) assert.equal((await fetch(app.url + resource)).status, 404, resource);
     assert.equal((await fetch(app.url, { method: 'POST' })).status, 405);

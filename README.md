@@ -27,11 +27,12 @@ Open http://localhost:8080, create a room, and share its invite with another bro
 - A Help page, searchable questions, and interactive sending, receiving, and folder tutorials.
 - **Pip**, an animated SVG courier-bird helper. It answers common questions locally and prepares file actions such as `send report.pdf`, `send all photos`, or `send folder Holiday`. Every send command shows a file review before sending. Pip is a free built-in guide, not a generative AI chatbot; no API key or external AI service is used. It only matches files explicitly added to Mystic and never reads their contents.
 - Random private room invites, deterministic connection roles, queued ICE candidates, disconnect handling and bounded signaling reconnects.
-- 16 KiB file chunks, AES-256-GCM per file, encryption in a module worker, and bounded send buffering.
-- Receiver acknowledgements after encrypted IndexedDB chunk writes; completion only after the receiver validates the final byte and chunk counts.
-- Cancellation, retry while the original file remains selected in the current session, bidirectional sharing, and zero-byte files.
-- Persistent received files with individual/ZIP folder downloads, rename, organization and deletion. Incomplete transfers remain identifiable and can be removed and resent.
+- 60 KiB file chunks, AES-256-GCM per file, encryption in a module worker, and bounded send buffering.
+- Receiver acknowledgements after encrypted IndexedDB chunk writes; completion only after byte/chunk counts and full-file SHA-256 match. Checksums verify bytes, not sender identity. Downloadable receipts record the result.
+- Cancellation and durable partial resume, including after a refresh: reconnect the same browser profiles and re-add the original file. The sender verifies the entire saved prefix before transmitting only the missing suffix. Re-sending an unchanged complete file verifies it without sending payload again. Bidirectional sharing, zero-byte files and explicit empty folders are supported.
+- Persistent received files with individual/ZIP folder downloads, rename, organization and deletion. Native file and folder writers stream to disk on supported desktop browsers; ZIP64 exports preserve large archives and empty directories. Other browsers retain a guarded memory fallback.
 - Private peer chat, display names, device-local preferences, history export and independent history clearing. History retains the newest 500 entries per category to bound local storage.
+- Optional passphrase protection, encrypted local backups/restore, persistent-storage requests and screen wake lock during transfers when supported.
 - Responsive, keyboard-accessible navigation, focus-preserving live updates, reduced-motion support and an original SVG logo/favicon.
 - HTTP security headers, same-origin WebSocket checks, bounded payloads and connections, per-socket message rate limits, two-peer room limits, heartbeats and a health endpoint.
 
@@ -56,16 +57,18 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the free Render setup, Docker option, con
 
 ## Storage and privacy
 
-History and received files belong to the browser profile. The vault stores encrypted file packets alongside their CryptoKey, so another person with access to that browser profile can download them. This is not a password-protected vault. Deleting browser site data removes local history, saved files and keys. Nothing is backed up to the server. Legacy IndexedDB names and the legacy display-name preference are retained internally to preserve existing user data through the rename.
+History and received files belong to the browser profile. Settings can protect saved file metadata and encryption keys with a passphrase (PBKDF2-SHA-256, 600,000 iterations; AES-256-GCM). File packets remain encrypted. A protected vault starts locked after reload; locking clears the wrapping key from application state. Messages and transfer history are separate and remain readable until cleared. Without protection, anyone using the profile can download saved files. The browser Web Locks API prevents concurrent Mystic vault tabs where supported.
+
+Encrypted `.mystic` backups stream to the user's own drive. Restoring checks authenticated records, chunk ordering, file checksums and an authenticated footer; failed imports are rolled back, and existing files are never overwritten. Keep the backup passphrase: there is no reset. Clearing site data still removes local copies; recovery needs a previously saved backup or download. A request for persistent browser storage helps against eviction but does not prevent manual clearing. No file storage, accounts or cloud backups exist on the server. Legacy IndexedDB names are retained to preserve existing files.
 
 WebRTC uses DTLS for transport protection. AES file keys are exchanged inside that channel. The connection server is trusted for peer negotiation: there is no independent peer identity verification. Share invites only with trusted recipients. A TURN relay, when configured, forwards encrypted WebRTC packets.
 
 ## Practical limits
 
 - Two devices per room; group rooms are not implemented.
-- Default per-file limit: 256 MiB, configurable with `MAX_FILE_SIZE`. Sending is chunked and receiving writes to IndexedDB, but a vault download assembles the file into a Blob. Browser quotas and available memory still apply. This is not an unlimited-size transfer guarantee.
-- Interrupted files must be resent. Automatic partial-transfer resume is not implemented.
-- Folder downloads use ZIP and preserve nested paths. A single folder download is capped at 256 MiB total and 500 files to protect browser memory. Empty folders without files are not transferred.
+- No default 256 MiB or 500-file transfer cap. The wire format allows up to 2^32-1 chunks of 60 KiB; browsers impose much smaller practical storage and file limits. Hosts may lower `MAX_FILE_SIZE`. Supported desktop browsers stream saved files and ZIP64 archives to disk. Other browsers use a 256 MiB memory-download fallback. This is not an unlimited-size guarantee.
+- Both devices must remain online with Mystic open. Resume preserves committed receiver chunks, but the sender must reselect the original file after a refresh. Device IDs, resume credentials and local chunks must still exist. Clearing either profile or changing the original prevents that resume.
+- Folder pickers with directory-handle support and drag-and-drop entries preserve empty folders. A plain directory input may omit them; New empty folder adds a marker explicitly. Available disk/quota still bounds receiving; huge exports need a browser with native saving.
 - Strict corporate, cellular or symmetric NAT networks may require a TURN relay. The default public STUN service does not guarantee connectivity.
 - Rooms are kept in process memory. Restarting the server loses waiting rooms. Established peer sessions can continue if the signaling connection is lost. Use one signaling instance unless shared room routing is implemented.
 

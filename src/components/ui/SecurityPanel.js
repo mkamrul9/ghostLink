@@ -1,0 +1,12 @@
+import Component from '../Component.js';
+import { icon } from '../../utils/icons.js';
+export default class SecurityPanel extends Component {
+    static watch = ['vaultState', 'vault', 'transfers'];
+    template() {
+        const state = this.props.store.state.vaultState, active = this.props.store.state.transfers.some(item => ['queued','sending','receiving'].includes(item.status));
+        return `<div class="security-panel"><p class="muted">${state.protected ? state.locked ? 'Your saved files are locked.' : 'Your saved files are protected with your passphrase.' : 'Protect saved file contents with a passphrase on this device.'}</p><div class="security-actions">${state.locked ? `<button class="btn btn-primary" data-action="unlock">${icon('lock')}Unlock files</button>` : `<button class="btn" data-action="protect" ${active || state.busy ? 'disabled' : ''}>${icon('lock')}${state.protected ? 'Change passphrase' : 'Protect files'}</button>${state.protected ? `<button class="btn" data-action="lock" ${active || state.busy ? 'disabled' : ''}>Lock files</button>` : ''}<button class="btn" data-action="backup" ${state.busy || !this.props.store.state.vault.length ? 'disabled' : ''}>${icon('download')}Save encrypted backup</button><button class="btn" data-action="restore" ${state.busy ? 'disabled' : ''}>${icon('upload')}Restore backup</button>`}</div><input type="file" id="backup-picker" accept=".mystic,application/octet-stream" hidden /><p class="muted">Backups stay on the device you choose. Keep the passphrase; Mystic cannot reset it. Messages and history are stored separately.</p><div class="security-actions"><button class="btn btn-small" data-action="persist" ${state.busy ? 'disabled' : ''}>Ask browser to keep local storage</button></div>${state.persistent ? '<p class="muted">Storage protection is enabled. Clearing this website data still deletes local copies.</p>' : ''}</div>`;
+    }
+    events() {
+        return [{ type:'click', selector:'[data-action]', handler:event => { const action = event.currentTarget.dataset.action; if (action === 'restore') this.element.querySelector('#backup-picker').click(); else this.props.onAction(action); } }, { type:'change', selector:'#backup-picker', handler:event => { const file = event.target.files[0]; if (file) this.props.onAction('restore', file); } }];
+    }
+}

@@ -23,20 +23,24 @@ import HelpPanel from './components/ui/HelpPanel.js';
 import AssistantPanel from './components/ui/AssistantPanel.js';
 import showTutorial from './components/ui/Tutorial.js';
 import { showShareRoom, inviteUrl } from './utils/ShareRoom.js';
-import { addFiles, filePath, namedFile, movePaths, renamedPath, safePath } from './utils/FileLibrary.js';
-import { createZip } from './utils/ZipDownload.js';
+import { addFiles, directoryFile, filePath, namedFile, movePaths, renamedPath, safePath } from './utils/FileLibrary.js';
+import { createZipStream } from './utils/ZipDownload.js';
+import { saveStream, saveFolderToDevice } from './utils/SaveToDevice.js';
+import { backupStream, restoreBackup } from './utils/LocalBackup.js';
+import SecurityPanel from './components/ui/SecurityPanel.js';
 import { textDialog } from './utils/dialogs.js';
 import { createRoomCode, normalizeRoomCode } from './utils/RoomCode.js';
 
 const store = new Store({ initialState: {
     files: [], fileSelection: [], receivedSelection: [], transfers: [], chat: [], peers: [], vault: [],
     ui: { ...loadSettings(), view: ({ '/received': 'vault', '/transfers': 'transfers', '/help': 'help', '/settings': 'settings' })[location.pathname] || 'dashboard', chatOpen: false, assistantOpen: false, connectionStatus: 'idle', dataChannelStatus: 'closed', booting: true, error: '' },
+    vaultState: { protected: false, locked: false, busy: false, persistent: false },
     session: { roomId: '', role: 'idle', peers: 0 }
 } });
 const db = new DBManager();
 const historyDb = new HistoryDB();
 const toast = new ToastNotification();
-let config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], maxFileSize: 268435456 };
+let config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], maxFileSize: Number.MAX_SAFE_INTEGER };
 let rtc = null;
 let signal = null;
 let transfers = null;
@@ -48,18 +52,55 @@ let retryFiles = new Map();
 let progressTicks = new Map();
 let persistenceWarning = false;
 const ui = patch => { store.state.ui = { ...store.state.ui, ...patch }; };
-const report = error => toast.show(error.message || String(error), 'error');
+const report = error => { if (error.name !== 'AbortError') toast.show(error.message || String(error), 'error'); };
 const save = promise => promise.catch(() => {
     if (!persistenceWarning) { persistenceWarning = true; toast.show('Browser history could not be saved. Your live session still works.', 'warning'); }
 });
 const refreshVault = async () => {
-    try { store.state.vault = (await db.getAllMetadata()).map(({ cryptoKey, ...metadata }) => metadata).sort((a, b) => b.createdAt - a.createdAt);
-        store.state.receivedSelection = store.state.receivedSelection.filter(id => store.state.vault.some(file => String(file.fileId) === id)); }
-    catch { /* startup reports storage availability */ }
+    store.state.vaultState = { ...store.state.vaultState, protected: Boolean(db.protection), locked: db.locked };
+    if (db.locked) { store.state.vault = []; store.state.receivedSelection = []; return; }
+    store.state.vault = (await db.getAllMetadata()).map(({ cryptoKey, ...metadata }) => metadata).sort((a, b) => b.createdAt - a.createdAt);
+    store.state.receivedSelection = store.state.receivedSelection.filter(id => store.state.vault.some(file => String(file.fileId) === id));
 };
+const activeTransfers = () => store.state.transfers.some(item => ['queued', 'sending', 'receiving'].includes(item.status));
+async function securityAction(action, file) {
+    try {
+        await ready;
+        if (store.state.vaultState.busy) return;
+        if (action === 'persist') {
+            const persistent = await navigator.storage?.persist?.() || false;
+            store.state.vaultState = { ...store.state.vaultState, persistent };
+            toast.show(persistent ? 'The browser will keep local files until you clear site data.' : 'The browser did not grant storage protection. Save a backup for important files.', 'info'); return;
+        }
+        if (['protect','lock','restore','backup'].includes(action) && activeTransfers()) throw new Error('Wait until your transfers finish first.');
+        if (action === 'lock') { db.lock(); await refreshVault(); return; }
+        let password;
+        if (action === 'protect' && db.protection) {
+            const current = await textDialog({ title: 'Current passphrase', label: 'Passphrase', secret: true, button: 'Continue' });
+            if (current === null) return; await db.unlock(current);
+        }
+        if (['protect','unlock','backup','restore'].includes(action)) {
+            password = await textDialog({ title: ({protect:'Protect your files',unlock:'Unlock your files',backup:'Save an encrypted backup',restore:'Restore your backup'})[action], label: action === 'backup' || action === 'restore' ? 'Backup passphrase' : 'Passphrase', secret: true, confirmSecret: ['protect','backup'].includes(action), hint: ['protect','backup'].includes(action) ? 'Use at least 12 characters. Keep it somewhere safe; there is no reset.' : '', button: ({protect:'Protect files',unlock:'Unlock',backup:'Choose where to save',restore:'Restore'})[action], validate: value => { if (['protect','backup'].includes(action) && value.length < 12) throw new Error('Use at least 12 characters.'); } });
+            if (password === null) return;
+        }
+        // Open the save picker directly from the passphrase dialog's submit activation.
+        let operation;
+        if (action === 'backup') {
+            const entries = store.state.vault;
+            operation = saveStream({ name: `Mystic-backup-${Date.now()}.mystic`, size: entries.reduce((n, item) => n + item.fileSize + item.totalChunks * 80 + 4096, 4096), source: () => backupStream(db, entries.map(item => item.fileId), password) });
+        }
+        store.state.vaultState = { ...store.state.vaultState, busy: true };
+        if (action === 'protect') await db.protect(password);
+        else if (action === 'unlock') await db.unlock(password);
+        else if (action === 'restore') { const count = await restoreBackup(db, file, password); toast.show(`${count} saved items restored.`, 'success'); }
+        else if (operation) { await operation; toast.show('Encrypted backup saved. Keep its passphrase safe.', 'success'); }
+        await refreshVault();
+    } catch (error) { report(error); }
+    finally { store.state.vaultState = { ...store.state.vaultState, busy: false }; }
+}
 const addTransfer = (transfer, file) => {
     if (file) retryFiles.set(transfer.id, file);
-    store.state.transfers = trimTransferHistory([...store.state.transfers, transfer]);
+    store.state.transfers = trimTransferHistory([...store.state.transfers.filter(item => item.id !== transfer.id), transfer]);
     save(historyDb.saveTransfer(transfer));
 };
 const updateTransfer = (id, patch) => {
@@ -123,6 +164,7 @@ function setupRtc(initiator, token) {
     const isCurrent = () => token === generation && rtc === currentRtc;
     transfers = new TransferManager(currentRtc, db, {
         maxFileSize: config.maxFileSize,
+        canReceive: () => !store.state.vaultState.busy,
         onAdd: addTransfer,
         onProgress: updateTransfer,
         onError: error => { if (isCurrent()) report(error); },
@@ -256,15 +298,13 @@ function stageIncoming(incoming) {
     try {
         const accepted = incoming.filter(file => file.size <= config.maxFileSize);
         if (accepted.length !== incoming.length) toast.show(`Files above ${formatBytes(config.maxFileSize)} were skipped.`, 'warning');
-        const additions = addFiles(store.state.files, accepted);
-        const available = Math.max(0, 500 - store.state.files.length);
-        const added = additions.slice(0, available);
-        if (added.length !== additions.length) toast.show('You can add up to 500 files at a time.', 'warning');
+        const added = addFiles(store.state.files, accepted);
         store.state.files = [...store.state.files, ...added];
         store.state.fileSelection = [...store.state.fileSelection, ...added.map(file => file.mysticId)];
     } catch (error) { report(error); }
 }
 function sendSelected(ids = store.state.fileSelection) {
+    if (db.locked || store.state.vaultState.busy) { report(new Error('Unlock your files and finish storage tasks first.')); return false; }
     if (!transfers || rtc?.dataChannel?.readyState !== 'open') { report(new Error('Connect another device first.')); return false; }
     const chosen = store.state.files.filter(file => ids.includes(file.mysticId));
     if (!chosen.length) { toast.show('Add and select the files you want to send.', 'info'); return false; }
@@ -277,8 +317,8 @@ function sendSelected(ids = store.state.fileSelection) {
 }
 function entriesFor(mode) {
     return mode === 'received'
-        ? store.state.vault.map(file => ({ id: String(file.fileId), path: file.relativePath || file.fileName, size: file.fileSize, complete: file.complete }))
-        : store.state.files.map(file => ({ id: file.mysticId, path: filePath(file), size: file.size, complete: true }));
+        ? store.state.vault.map(file => ({ id: String(file.fileId), path: file.relativePath || file.fileName, size: file.fileSize, directory: file.kind === 'directory', complete: file.complete }))
+        : store.state.files.map(file => ({ id: file.mysticId, path: filePath(file), size: file.size, directory: Boolean(file.mysticDirectory), complete: true }));
 }
 async function updatePaths(mode, changes) {
     if (mode === 'send') {
@@ -292,19 +332,21 @@ async function updatePaths(mode, changes) {
         await refreshVault();
     }
 }
-async function downloadReceived(ids, folder = false) {
+async function downloadReceived(ids, folder = false, nativeFolder = false) {
     const selected = entriesFor('received').filter(entry => ids.includes(entry.id));
     if (!selected.length) return;
     if (selected.some(entry => !entry.complete)) throw new Error('Wait until the selected files finish arriving.');
-    if (selected.length === 1 && !folder) {
-        const { blob, name } = await db.getFileBlob(Number(selected[0].id)); downloadBlob(blob, name); return;
+    const entries = selected.map(entry => ({ ...entry, getChunks: () => db.fileChunks(Number(entry.id)) }));
+    if (nativeFolder) { await saveFolderToDevice(entries); toast.show('Files saved in a new Mystic folder.', 'success'); return; }
+    if (entries.length === 1 && !folder && !entries[0].directory) {
+        const entry = entries[0];
+        await saveStream({ name: entry.path.split('/').at(-1), size: entry.size, source: entry.getChunks }); return;
     }
-    toast.show('Preparing your folder download...', 'info');
-    const blob = await createZip(selected.map(entry => ({ ...entry, getBlob: async () => (await db.getFileBlob(Number(entry.id))).blob })));
-    downloadBlob(blob, 'Mystic-files.zip');
+    await saveStream({ name: 'Mystic-files.zip', size: entries.reduce((n, item) => n + item.size + 512 + item.path.length * 6, 1024), source: () => createZipStream(entries), type: 'application/zip' });
 }
 async function libraryAction(mode, action, ids) {
     try {
+        if (action === 'unlock') return securityAction('unlock');
         const entries = entriesFor(mode);
         const selected = entries.filter(entry => ids.includes(entry.id));
         if (action === 'send') return sendSelected(ids);
@@ -331,13 +373,14 @@ async function libraryAction(mode, action, ids) {
                 await refreshVault();
                 toast.show('Files deleted.', 'success');
             }
-        } else if (action.startsWith('download')) await downloadReceived(ids, action === 'download-folder');
+        } else if (action === 'save-folder') await downloadReceived(ids, true, true);
+        else if (action.startsWith('download')) await downloadReceived(ids, action === 'download-folder');
     } catch (error) { report(error); }
 }
 const shell = new DashboardShell({ store, onView: changeView, onChat: () => ui({ chatOpen: !store.state.ui.chatOpen, assistantOpen: false }), onTutorial: tutorial });
 shell.mount(document.getElementById('app'));
 function mount(Component, slot, props = {}) { const component = new Component({ store, ...props }); component.mount(document.getElementById(slot)); return component; }
-const dropZone = mount(DropZone, 'drop-zone-slot', { onFiles: stageIncoming, onError: report });
+const dropZone = mount(DropZone, 'drop-zone-slot', { onFiles: stageIncoming, onError: report, onEmptyFolder: async () => { const name = await textDialog({ title: 'New empty folder', label: 'Folder path', button: 'Add folder', validate: safePath }); if (name !== null) stageIncoming([directoryFile(name)]); } });
 mount(FileTree, 'file-tree-slot', { mode: 'send', onSelect: ids => { store.state.fileSelection = ids; }, onAction: (action, ids) => libraryAction('send', action, ids) });
 mount(FileTree, 'vault-slot', { mode: 'received', onSelect: ids => { store.state.receivedSelection = ids; }, onAction: (action, ids) => libraryAction('received', action, ids) });
 mount(TransferQueue, 'queue-slot', {
@@ -345,6 +388,7 @@ mount(TransferQueue, 'queue-slot', {
     onAction: (action, id) => {
         if (action === 'cancel') transfers?.cancel(id);
         else if (action === 'retry') { const file = retryFiles.get(id); if (file && transfers) transfers.sendFiles([file]).catch(report); }
+        else if (action === 'receipt') { const item = store.state.transfers.find(entry => entry.id === id); if (item?.verified) downloadBlob(new Blob([JSON.stringify({ app: 'Mystic', version: 1, file: item.relativePath || item.name, bytes: item.size, sha256: item.sha256, verifiedAt: item.completedAt || item.updatedAt, direction: item.direction, resumedBytes: item.resumedBytes || 0, note: 'A matching checksum confirms file bytes. It does not verify who sent the file.' }, null, 2)], {type:'application/json'}), 'Mystic-file-receipt.json'); }
         else libraryAction('received', 'download', [String(id)]);
     }
 });
@@ -378,6 +422,7 @@ mount(SettingsPanel, 'settings-slot', { onSave: (name, serverUrl) => {
         ui({ username, signalUrl }); toast.show('Settings saved.', 'success');
     } catch (error) { report(error); }
 } });
+mount(SecurityPanel, 'security-slot', { onAction: securityAction });
 mount(HelpPanel, 'help-slot', { onTutorial: tutorial, onAssistant: openAssistant });
 mount(AssistantPanel, 'assistant-slot', { onToggle: () => ui({ assistantOpen: !store.state.ui.assistantOpen, chatOpen: false }), onAction: action => {
     if (action.type !== 'send') ui({ assistantOpen: false });
@@ -392,7 +437,7 @@ mount(AssistantPanel, 'assistant-slot', { onToggle: () => ui({ assistantOpen: !s
 } });
 const ready = (async () => {
     const results = await Promise.allSettled([
-        db.init().then(refreshVault),
+        db.init().then(async () => { await refreshVault(); store.state.vaultState = { ...store.state.vaultState, persistent: await navigator.storage?.persisted?.() || false }; }),
         historyDb.init().then(async () => {
             const [chat, savedTransfers, peers] = await Promise.all([historyDb.loadChat(200), historyDb.loadTransfers(200), historyDb.loadPeers()]);
             store.state.chat = chat;
@@ -401,7 +446,7 @@ const ready = (async () => {
         }),
         fetch('/api/config').then(response => { if (!response.ok) throw new Error(); return response.json(); }).then(value => { config = value; })
     ]);
-    if (results[0].status === 'rejected') toast.show('Browser file storage is unavailable. Enable site storage to receive files.', 'warning', 7000);
+    if (results[0].status === 'rejected') toast.show(results[0].reason.message || 'Browser file storage is unavailable. Enable site storage to receive files.', 'warning', 10000);
     if (results[1].status === 'rejected') toast.show('Browser history is unavailable for this session.', 'warning');
     if (results[2].status === 'rejected') toast.show('Server settings could not load. Using default connection settings.', 'warning');
     ui({ booting: false });
@@ -446,3 +491,16 @@ window.addEventListener('keydown', event => {
     if (!panel.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); first.focus(); }
     else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
 });
+
+let wakeLock = null, requestingWakeLock = false;
+async function keepAwake() {
+    if (!activeTransfers() || document.visibilityState !== 'visible') { await wakeLock?.release().catch(() => {}); wakeLock = null; return; }
+    if (!wakeLock && !requestingWakeLock && navigator.wakeLock) {
+        requestingWakeLock = true;
+        try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+        catch { /* Browser or power settings can decline this optional request. */ }
+        finally { requestingWakeLock = false; }
+    }
+}
+store.events.subscribe('stateChange', (_state, key) => { if (key === 'transfers') keepAwake(); });
+document.addEventListener('visibilitychange', keepAwake);

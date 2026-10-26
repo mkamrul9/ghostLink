@@ -19,6 +19,7 @@ async function device(viewport = { width: 1440, height: 1050 }, path = '/') {
     const context = await browser.newContext({ viewport, acceptDownloads: true });
     context.setDefaultTimeout(20000); contexts.push(context);
     await context.addInitScript(() => {
+        window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined;
         window.__copied = [];
         Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async value => { window.__copied.push(value); } } });
         Object.defineProperty(navigator, 'share', { configurable: true, value: async value => { window.__shared = value; } });
@@ -91,9 +92,9 @@ try {
     await host.getByRole('checkbox', { name: 'Select Holiday/day1/photo.jpg', exact: true }).waitFor();
     await host.getByRole('searchbox', { name: 'Search selected files' }).fill('trip-notes');
     assert.equal(await host.locator('.send-browser .file-row').count(), 1);
-    await host.getByRole('checkbox', { name: 'Select all visible files', exact: true }).uncheck();
+    await host.getByRole('checkbox', { name: 'Select all files', exact: true }).uncheck();
     await host.getByRole('searchbox', { name: 'Search selected files' }).fill('');
-    await host.getByRole('checkbox', { name: 'Select all visible files', exact: true }).check();
+    await host.getByRole('checkbox', { name: 'Select all files', exact: true }).check();
     await host.getByRole('combobox', { name: 'Sort files' }).first().selectOption('size');
     console.log('PASS: adding nested folders, rename, move, search, sort and selection');
     await host.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); document.activeElement?.blur(); window.scrollTo(0, 0); document.querySelector('.toast-container').replaceChildren(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
@@ -156,7 +157,7 @@ try {
     const cancelled = host.locator('.transfer-card').filter({ hasText: 'cancel-and-retry.bin' }).first();
     await cancelled.getByRole('button', { name: 'Cancel', exact: true }).click();
     await cancelled.locator('.status-cancelled').waitFor();
-    await cancelled.getByRole('button', { name: 'Try again', exact: true }).click();
+    await cancelled.getByRole('button', { name: 'Resume', exact: true }).click();
     await Promise.all([complete(host, 7), complete(guest, 7)]);
     console.log('PASS: transfers work in both directions, with cancellation and retry');
 

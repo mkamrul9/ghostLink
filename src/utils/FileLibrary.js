@@ -6,11 +6,13 @@ export function safePath(input) {
     return parts.join('/');
 }
 export function filePath(file) { return safePath(file.mysticPath || file.webkitRelativePath || file.fullPath || file.name); }
+export function directoryFile(path) { const file = new File([], safePath(path).split('/').at(-1), { type: 'application/x-mystic-directory' }); file.mysticDirectory = true; return namedFile(file, path); }
 export function namedFile(file, path, id = file.mysticId || crypto.randomUUID()) {
     const normalized = safePath(path);
     const copy = new File([file], normalized.split('/').at(-1), { type: file.type, lastModified: file.lastModified });
     copy.mysticPath = normalized;
     copy.mysticId = id;
+    copy.mysticDirectory = Boolean(file.mysticDirectory);
     return copy;
 }
 function uniquePath(path, used) {
@@ -29,7 +31,7 @@ export function addFiles(current, incoming) {
     const added = [];
     for (const file of incoming) {
         const path = filePath(file);
-        if (current.some(existing => filePath(existing) === path && existing.size === file.size && existing.lastModified === file.lastModified)) continue;
+        if (current.some(existing => filePath(existing) === path && existing.size === file.size && (file.mysticDirectory && existing.mysticDirectory || existing.lastModified === file.lastModified))) continue;
         added.push(namedFile(file, uniquePath(path, used)));
     }
     return added;
@@ -62,12 +64,12 @@ export function fileTree(entries) {
     for (const entry of entries) {
         const parts = safePath(entry.path).split('/');
         let node = root;
-        for (const name of parts.slice(0, -1)) {
+        for (const name of parts.slice(0, entry.directory ? undefined : -1)) {
             if (!node.folders.has(name)) node.folders.set(name, { name, folders: new Map(), files: [] });
             node = node.folders.get(name);
         }
-        node.files.push(entry);
+        if (entry.directory) (node.directories ||= []).push(entry); else node.files.push(entry);
     }
     return root;
 }
-export function nestedFiles(node) { return [...node.files, ...[...node.folders.values()].flatMap(nestedFiles)]; }
+export function nestedFiles(node) { return [...(node.directories || []), ...node.files, ...[...node.folders.values()].flatMap(nestedFiles)]; }

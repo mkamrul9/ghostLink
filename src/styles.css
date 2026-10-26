@@ -291,3 +291,8 @@ input[type="checkbox"] { width: 17px; height: 17px; flex: 0 0 17px; accent-color
 @media (max-width:760px) { .nav-item { font-size: 13px; min-height: 78px; } }
 
 @media (max-width:760px) { .assistant-panel, .message-drawer { max-width: calc(100vw - 24px); } }
+
+.security-actions { display:flex; flex-wrap:wrap; gap:10px; margin:16px 0; }
+.security-panel p { overflow-wrap:anywhere; }
+.security-actions .btn { white-space:normal; text-align:left; }
+.show-more { margin:12px 0; }

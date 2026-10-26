@@ -13,7 +13,7 @@ export function createApp(options = {}) {
     const iceServers = options.iceServers ?? JSON.parse(process.env.ICE_SERVERS || JSON.stringify(defaultIceServers));
     if (!Array.isArray(iceServers)) throw new Error('ICE_SERVERS must be a JSON array.');
     const maxClients = options.maxClients ?? Number(process.env.MAX_CLIENTS || 10000);
-    const maxFileSize = options.maxFileSize ?? Number(process.env.MAX_FILE_SIZE || 268435456);
+    const maxFileSize = options.maxFileSize ?? Number(process.env.MAX_FILE_SIZE || Number.MAX_SAFE_INTEGER);
     if (!Number.isSafeInteger(maxClients) || maxClients < 1 || !Number.isSafeInteger(maxFileSize) || maxFileSize < 1) throw new Error('MAX_CLIENTS and MAX_FILE_SIZE must be positive integers.');
     const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(origin => origin.trim()).filter(Boolean);
     const server = http.createServer(async (req, res) => {

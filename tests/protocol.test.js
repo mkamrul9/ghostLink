@@ -44,7 +44,7 @@ test('queued files can be cancelled before transmission and survive disconnect a
     const { manager, rtc, added, changes } = await fixture(t);
     rtc.sendControl = message => queueMicrotask(() => {
         if (message.type === 'FILE_META') manager.control({ type: 'FILE_READY', fileId: message.fileId });
-        if (message.type === 'FILE_END') manager.control({ type: 'FILE_COMPLETE', fileId: message.fileId });
+        if (message.type === 'FILE_END') manager.control({ type: 'FILE_COMPLETE', fileId: message.fileId, sha256: message.sha256 });
     });
     const result = manager.sendFiles([new File([], 'first.txt'), new File([], 'second.txt')]);
     manager.cancel(added[1].id);

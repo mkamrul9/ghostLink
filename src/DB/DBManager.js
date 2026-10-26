@@ -1,72 +1,140 @@
 import { unpackEncryptedChunk } from '../utils/BinaryPacker.js';
 import { decryptChunk } from '../utils/CryptoVault.js';
-
+import { utf8, passwordKey, sealBytes, openBytes, serializeMetadata, deserializeMetadata } from '../utils/LocalCrypto.js';
+const MEMORY_DOWNLOAD_LIMIT = 256 * 1024 * 1024;
 export default class DBManager {
-    constructor() {
-        // Retain the original database name so existing browser data survives the rebrand.
-        this.dbName = 'GhostLinkVault';
-        this.db = null;
-    }
+    constructor() { this.dbName = 'GhostLinkVault'; this.db = null; this.protection = null; this.unlockKey = null; }
+    get locked() { return Boolean(this.protection && !this.unlockKey); }
     init() {
         if (this.opening) return this.opening;
-        this.opening = new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 2);
+        this.opening = this.acquireTabLock().then(() => new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 3);
             request.onupgradeneeded = () => {
                 const db = request.result;
                 if (!db.objectStoreNames.contains('metadata')) db.createObjectStore('metadata', { keyPath: 'fileId' });
                 const chunks = db.objectStoreNames.contains('chunks') ? request.transaction.objectStore('chunks') : db.createObjectStore('chunks', { keyPath: 'id' });
                 if (!chunks.indexNames.contains('fileId')) chunks.createIndex('fileId', 'fileId');
+                if (!db.objectStoreNames.contains('outgoing')) db.createObjectStore('outgoing', { keyPath: 'id' });
+                if (!db.objectStoreNames.contains('config')) db.createObjectStore('config', { keyPath: 'id' });
             };
-            request.onsuccess = () => {
-                this.db = request.result;
-                this.db.onversionchange = () => this.db.close();
-                resolve(this.db);
+            request.onsuccess = async () => {
+                this.db = request.result; this.db.onversionchange = () => this.close();
+                try { this.protection = await this.transaction(['config'], 'readonly', tx => tx.objectStore('config').get('protection')) || null; if (!this.locked) await this.cleanupImports(); resolve(this.db); }
+                catch (error) { reject(error); }
             };
             request.onerror = () => reject(request.error);
-            request.onblocked = () => reject(new Error('Close older app tabs to update local storage.'));
-        });
+            request.onblocked = () => reject(new Error('Close older Mystic tabs to update local storage.'));
+        }));
         return this.opening;
     }
+    async acquireTabLock() {
+        if (typeof window === 'undefined' || !navigator.locks) return;
+        await new Promise((resolve, reject) => {
+            navigator.locks.request(`mystic-vault:${this.dbName}`, { ifAvailable: true }, async lock => {
+                if (!lock) { reject(new Error('Mystic files are already open in another tab. Close that tab and refresh.')); return; }
+                await new Promise(release => { this.releaseTabLock = release; resolve(); });
+            }).catch(reject);
+        });
+    }
+    close() { this.db?.close(); this.releaseTabLock?.(); }
     transaction(stores, mode, action) {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('Local file storage is unavailable.'));
             const tx = this.db.transaction(stores, mode);
             let result;
             try { result = action(tx); } catch (error) { tx.abort(); reject(error); return; }
-            tx.oncomplete = () => resolve(result?.result);
-            tx.onerror = () => reject(tx.error || new Error('Local storage failed.'));
-            tx.onabort = () => reject(tx.error || new Error('Local storage was interrupted.'));
+            tx.oncomplete = () => resolve(Array.isArray(result) ? result.map(request => request.result) : result?.result);
+            tx.onerror = tx.onabort = () => reject(tx.error || new Error('Local storage was interrupted.'));
         });
     }
-    saveMetadata(metadata) { return this.transaction(['metadata'], 'readwrite', tx => tx.objectStore('metadata').put(metadata)); }
-    getMetadata(fileId) { return this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').get(fileId)); }
-    getAllMetadata() { return this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').getAll()); }
-    saveChunk(fileId, chunkIndex, packet) {
-        return this.transaction(['chunks'], 'readwrite', tx => tx.objectStore('chunks').put({ id: `${fileId}_${chunkIndex}`, fileId, chunkIndex, data: packet }));
+    requireUnlocked() { if (this.locked) throw new Error('Unlock your received files first.'); }
+    async encode(metadata, store, keyName, key = this.unlockKey) {
+        if (!this.protection && !key) return metadata;
+        if (!key) throw new Error('Unlock your received files first.');
+        const sealed = await sealBytes(key, utf8(JSON.stringify(await serializeMetadata(metadata))), `${store}:${metadata[keyName]}`);
+        return { [keyName]: metadata[keyName], sealed };
     }
-    getChunk(fileId, index) { return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').get(`${fileId}_${index}`)); }
-    getSavedChunkCount(fileId) { return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').index('fileId').count(fileId)); }
+    async decode(record, store, keyName) {
+        this.requireUnlocked();
+        if (!record?.sealed) return record;
+        if (!this.unlockKey) throw new Error('Unlock your received files first.');
+        return deserializeMetadata(JSON.parse(new TextDecoder().decode(await openBytes(this.unlockKey, record.sealed, `${store}:${record[keyName]}`))));
+    }
+    async saveMetadata(metadata) { this.requireUnlocked(); const record = await this.encode(metadata, 'metadata', 'fileId'); return this.transaction(['metadata'], 'readwrite', tx => tx.objectStore('metadata').put(record)); }
+    async getMetadata(id) { this.requireUnlocked(); return this.decode(await this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').get(id)), 'metadata', 'fileId'); }
+    async getAllMetadata(includeImports = false) { this.requireUnlocked(); const records = await this.transaction(['metadata'], 'readonly', tx => tx.objectStore('metadata').getAll()); const decoded = await Promise.all(records.map(record => this.decode(record, 'metadata', 'fileId'))); return includeImports ? decoded : decoded.filter(record => !record.importing); }
+    async getOutgoing(id) { this.requireUnlocked(); return this.decode(await this.transaction(['outgoing'], 'readonly', tx => tx.objectStore('outgoing').get(id)), 'outgoing', 'id'); }
+    deleteOutgoing(id) { return this.transaction(['outgoing'], 'readwrite', tx => tx.objectStore('outgoing').delete(id)); }
+    async saveOutgoing(metadata) { this.requireUnlocked(); const record = await this.encode(metadata, 'outgoing', 'id'); return this.transaction(['outgoing'], 'readwrite', tx => tx.objectStore('outgoing').put(record)); }
+    saveChunk(fileId, chunkIndex, packet) { this.requireUnlocked(); return this.transaction(['chunks'], 'readwrite', tx => tx.objectStore('chunks').put({ id: `${fileId}_${chunkIndex}`, fileId, chunkIndex, data: packet })); }
+    async saveReceivedChunk(metadata, index, packet) {
+        this.requireUnlocked();
+        const record = await this.encode(metadata, 'metadata', 'fileId');
+        return this.transaction(['metadata', 'chunks'], 'readwrite', tx => {
+            tx.objectStore('chunks').put({ id: `${metadata.fileId}_${index}`, fileId: metadata.fileId, chunkIndex: index, data: packet });
+            tx.objectStore('metadata').put(record);
+        });
+    }
+    getChunk(fileId, index) { this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').get(`${fileId}_${index}`)); }
+    getChunks(fileId, first, count) { this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => Array.from({ length: count }, (_, offset) => tx.objectStore('chunks').get(`${fileId}_${first + offset}`))); }
+    getSavedChunkCount(id) { this.requireUnlocked(); return this.transaction(['chunks'], 'readonly', tx => tx.objectStore('chunks').index('fileId').count(id)); }
     deleteFile(fileId) {
+        this.requireUnlocked();
         return this.transaction(['metadata', 'chunks'], 'readwrite', tx => {
             tx.objectStore('metadata').delete(fileId);
             const cursor = tx.objectStore('chunks').index('fileId').openCursor(IDBKeyRange.only(fileId));
             cursor.onsuccess = () => { const entry = cursor.result; if (entry) { entry.delete(); entry.continue(); } };
         });
     }
-    async getFileBlob(fileId) {
+    async *fileChunks(fileId) {
         const metadata = await this.getMetadata(fileId);
-        if (!metadata?.complete) throw new Error('This file is incomplete. Ask the sender to retry.');
-        const chunks = [];
+        if (!metadata?.complete) throw new Error('This file is incomplete. Ask the sender to resume it.');
         let size = 0;
-        for (let index = 0; index < metadata.totalChunks; index++) {
-            const record = await this.getChunk(fileId, index);
-            if (!record) throw new Error('A saved chunk is missing. Ask the sender to retry.');
-            const packet = unpackEncryptedChunk(record.data);
-            const buffer = await decryptChunk(metadata.cryptoKey, packet.iv, packet.encryptedPayload);
-            chunks.push(buffer);
-            size += buffer.byteLength;
+        for (let first = 0; first < metadata.totalChunks; first += 64) {
+            const records = await this.getChunks(fileId, first, Math.min(64, metadata.totalChunks - first));
+            for (let offset = 0; offset < records.length; offset++) {
+                if (!records[offset]) throw new Error('A saved chunk is missing. Ask the sender to resume it.');
+                const packet = unpackEncryptedChunk(records[offset].data);
+                if (packet.fileId !== fileId || packet.chunkIndex !== first + offset) throw new Error('Saved file data is invalid.');
+                const buffer = await decryptChunk(metadata.cryptoKey, packet.iv, packet.encryptedPayload);
+                size += buffer.byteLength; yield new Uint8Array(buffer);
+            }
         }
         if (size !== metadata.fileSize) throw new Error('Saved file size does not match.');
+    }
+    async getFileBlob(fileId, maxBytes = MEMORY_DOWNLOAD_LIMIT) {
+        const metadata = await this.getMetadata(fileId);
+        if (!metadata?.complete) throw new Error('This file is incomplete. Ask the sender to resume it.');
+        if (metadata.fileSize > maxBytes) throw new Error('Use Save to device in a browser with direct file saving for this large file.');
+        const chunks = [];
+        for await (const chunk of this.fileChunks(fileId)) chunks.push(chunk);
         return { blob: new Blob(chunks, { type: metadata.mimeType }), name: metadata.fileName };
     }
+    async protect(password) {
+        this.requireUnlocked();
+        if (password.length < 12) throw new Error('Use a passphrase with at least 12 characters.');
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const key = await passwordKey(password, salt);
+        const metadata = await this.getAllMetadata();
+        const rawOutgoing = await this.transaction(['outgoing'], 'readonly', tx => tx.objectStore('outgoing').getAll());
+        const outgoing = await Promise.all(rawOutgoing.map(record => this.decode(record, 'outgoing', 'id')));
+        const protectedMetadata = await Promise.all(metadata.map(record => this.encode(record, 'metadata', 'fileId', key)));
+        const protectedOutgoing = await Promise.all(outgoing.map(record => this.encode(record, 'outgoing', 'id', key)));
+        const protection = { id: 'protection', version: 1, salt: [...salt], iterations: 600000, check: await sealBytes(key, utf8('Mystic local vault v1'), 'mystic-vault-check-v1') };
+        await this.transaction(['metadata', 'outgoing', 'config'], 'readwrite', tx => {
+            for (const record of protectedMetadata) tx.objectStore('metadata').put(record);
+            for (const record of protectedOutgoing) tx.objectStore('outgoing').put(record);
+            tx.objectStore('config').put(protection);
+        });
+        this.protection = protection; this.unlockKey = key;
+    }
+    async unlock(password) {
+        if (!this.protection) return;
+        const key = await passwordKey(password, new Uint8Array(this.protection.salt), this.protection.iterations);
+        try { if (new TextDecoder().decode(await openBytes(key, this.protection.check, 'mystic-vault-check-v1')) !== 'Mystic local vault v1') throw new Error(); }
+        catch { throw new Error('That passphrase did not unlock your files.'); }
+        this.unlockKey = key; await this.cleanupImports();
+    }
+    async cleanupImports() { for (const metadata of await this.getAllMetadata(true)) if (metadata.importing) await this.deleteFile(metadata.fileId); }
+    lock() { if (this.protection) this.unlockKey = null; }
 }
