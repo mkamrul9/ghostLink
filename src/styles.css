@@ -53,7 +53,7 @@ input::placeholder { color: #aaa49d; }
 input[type="checkbox"] { width: 17px; height: 17px; flex: 0 0 17px; accent-color: var(--accent); cursor: pointer; }
 .room-code-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .room-code-row { display: block; }
-.room-code-row input { font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0; }
+.room-code-row input { padding-inline: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0; }
 .input-divider { text-align: center; color: var(--muted); font-size: 14px; }
 .inline-error { font-size: 14px; color: var(--danger); overflow-wrap: anywhere; margin: 0; }
 .sidebar-help { display: flex; gap: 10px; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--muted); min-height: 44px; font-size: 14px; }
@@ -204,7 +204,7 @@ input[type="checkbox"] { width: 17px; height: 17px; flex: 0 0 17px; accent-color
 .toast-error { border-left-color: var(--danger); }
 .skip-link { position: fixed; width: 1px; height: 1px; clip-path: inset(100%); overflow: hidden; left: 20px; top: 10px; padding: 12px 18px; border-radius: 8px; background: var(--accent); color: #251b14; z-index: 40; }
 .skip-link:focus { width: auto; height: auto; clip-path: none; overflow: visible; }
-@media (max-width:1000px) { .app-shell { padding-inline: 22px; } .app-body { grid-template-columns: 220px minmax(0,1fr); gap: 24px; } .panel { padding: 20px; } .hero-panel { padding: 0; } .file-toolbar { grid-template-columns: minmax(0,1fr) 140px; gap: 10px; } .tutorial-cards { grid-template-columns: 1fr; gap: 12px; } .tutorial-card { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 14px; padding: 19px; } .tutorial-card > span { margin-left: auto; } }
+@media (max-width:1000px) { .app-shell { padding-inline: 22px; } .app-body { grid-template-columns: 244px minmax(0,1fr); gap: 24px; } .panel { padding: 20px; } .hero-panel { padding: 0; } .file-toolbar { grid-template-columns: minmax(0,1fr) 140px; gap: 10px; } .tutorial-cards { grid-template-columns: 1fr; gap: 12px; } .tutorial-card { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 14px; padding: 19px; } .tutorial-card > span { margin-left: auto; } }
 @media (max-width:760px) {
  .app-shell { padding: 0 16px 100px; }
  .app-header { min-height: 83px; margin-bottom: 16px; flex-wrap: wrap; padding-block: 18px; gap: 15px; }
