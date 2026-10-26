@@ -9,7 +9,8 @@ Render supports Node web services and WebSockets on its free plan. The included 
 3. Select **New > Blueprint**, choose the repository and use the included `render.yaml`. Confirm the service is on **Free** before creating it.
 4. Once deployment completes, open the service's `https://...onrender.com` URL. The app automatically connects to `wss://...onrender.com/signal`.
 5. Verify `/healthz`, connect two separate devices, exchange files in both directions, compare the downloads and test a cellular-to-home-network connection.
-6. Add a TURN configuration for networks that cannot connect directly. Run the smoke test again through those networks before a public release.
+6. Check room sharing from a phone, send a folder, download it as a ZIP, and try the Help tutorial and Pip. Pip works without an AI service or API key.
+7. Add a TURN configuration for networks that cannot connect directly. Run the smoke test again through those networks before a public release.
 
 No domain purchase is required. Publishing requires the owner's hosting account; repository configuration alone does not create a live service.
 
