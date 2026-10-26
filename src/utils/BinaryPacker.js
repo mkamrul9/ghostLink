@@ -50,6 +50,7 @@ export function unpackChunk(packetBuffer) {
  * @returns {ArrayBuffer}
  */
 export function packEncryptedChunk(fileId, chunkIndex, iv, encryptedBuffer) {
+    if (!Number.isInteger(fileId) || fileId < 0 || fileId > 0xffffffff || !Number.isInteger(chunkIndex) || chunkIndex < 0 || chunkIndex > 0xffffffff || iv.byteLength !== 12) throw new Error('Invalid packet header.');
     const totalLength = HEADER_SIZE + encryptedBuffer.byteLength;
     const packetBuffer = new ArrayBuffer(totalLength);
     const view = new DataView(packetBuffer);
@@ -75,6 +76,7 @@ export function packEncryptedChunk(fileId, chunkIndex, iv, encryptedBuffer) {
  * @returns {{fileId:number, chunkIndex:number, iv:Uint8Array, encryptedData:ArrayBuffer}}
  */
 export function unpackEncryptedChunk(packetBuffer) {
+    if (!(packetBuffer instanceof ArrayBuffer) || packetBuffer.byteLength < HEADER_SIZE + 16) throw new Error('Invalid encrypted packet.');
     const view = new DataView(packetBuffer);
 
     // 1. Extract Metadata (First 8 bytes)

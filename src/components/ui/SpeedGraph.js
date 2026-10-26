@@ -1,6 +1,7 @@
 import Component from '../Component.js';
 
 export default class SpeedGraph extends Component {
+    update() {}
     initialState() {
         return {
             historyLength: 60, // Keep the last 60 data points
@@ -29,7 +30,8 @@ export default class SpeedGraph extends Component {
     }
 
     onUnmount() {
-        this.state.isRunning = false; // Stops the requestAnimationFrame loop
+        this.state.isRunning = false;
+        cancelAnimationFrame(this.frame);
     }
 
     /**
@@ -58,7 +60,7 @@ export default class SpeedGraph extends Component {
         this.drawGraph();
 
         // Schedule the next frame recursively
-        requestAnimationFrame(this.renderLoop.bind(this));
+        this.frame = requestAnimationFrame(this.renderLoop.bind(this));
     }
 
     /**
@@ -72,13 +74,13 @@ export default class SpeedGraph extends Component {
         this.ctx.clearRect(0, 0, width, height);
 
         // 2. Setup styles (Sci-Fi Hacker aesthetics)
-        this.ctx.strokeStyle = '#00ffcc'; // Neon Cyan
+        this.ctx.strokeStyle = '#ff9a58'; // Neon Cyan
         this.ctx.lineWidth = 2;
         this.ctx.lineJoin = 'round';
 
         // Add a glowing effect
         this.ctx.shadowBlur = 10;
-        this.ctx.shadowColor = '#00ffcc';
+        this.ctx.shadowColor = '#ff9a58';
 
         // 3. Begin drawing the path
         this.ctx.beginPath();
@@ -104,8 +106,8 @@ export default class SpeedGraph extends Component {
 
         // 5. (Optional) Fill underneath the line with a gradient
         const gradient = this.ctx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, 'rgba(0, 255, 204, 0.4)');
-        gradient.addColorStop(1, 'rgba(0, 255, 204, 0.0)');
+        gradient.addColorStop(0, 'rgba(255, 154, 88, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 154, 88, 0.0)');
 
         this.ctx.lineTo(width, height);
         this.ctx.lineTo(0, height);

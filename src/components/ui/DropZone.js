@@ -1,77 +1,40 @@
 import Component from '../Component.js';
 import { handleDroppedItems } from '../../helpers/FileSystemHelper.js';
-
 export default class DropZone extends Component {
-    initialState() {
-        return { isDragging: false };
-    }
-
+    static watch = ['ui', 'files'];
     template() {
-        const dragClass = this.state.isDragging ? 'drop-zone active-drag' : 'drop-zone';
-
-        return `
-            <div class="${dragClass}">
-                <div class="drop-zone__inner">
-                    <h2>Drag & Drop Files or Folders Here</h2>
-                    <p>GhostLink will automatically parse your folder structure.</p>
-                    <div class="drop-zone__cta">
-                        <span class="tag">Encrypted</span>
-                        <span class="tag">Chunked</span>
-                        <span class="tag">P2P</span>
-                    </div>
+        const { files, ui } = this.props.store.state;
+        return `<div class="drop-zone">
+            <div class="drop-zone__inner">
+                <span class="eyebrow">YOUR FILES. A DIRECT ROUTE.</span>
+                <div class="drop-icon" aria-hidden="true">↥</div>
+                <h1>Big ideas.<br>Meet instant sharing.</h1>
+                <p>Drop files or a folder here. Send directly to another device, with no cloud upload.</p>
+                <div class="drop-zone__cta">
+                    <button class="btn btn-primary" data-action="browse">Choose files</button>
+                    <button class="btn" data-action="folder">Choose folder</button>
                 </div>
-      </div>
-    `;
+                <input type="file" id="file-picker" multiple hidden aria-label="Choose files to share" />
+                <input type="file" id="folder-picker" webkitdirectory multiple hidden aria-label="Choose a folder to share" />
+                <div class="drop-zone__tags"><span>Encrypted in transit</span><span>Direct to device</span><span>No account needed</span></div>
+                ${files.length ? `<button class="btn btn-primary send-staged" data-action="send" ${ui.dataChannelStatus === 'open' ? '' : 'disabled'}>Send ${files.length} selected file${files.length === 1 ? '' : 's'}</button>` : ''}
+                <p class="drop-zone__hint">${ui.dataChannelStatus === 'open' ? 'Your peer is connected. Ready when you are.' : 'Create a room and invite your other device to start.'}</p>
+            </div>
+        </div>`;
     }
-
     events() {
         return [
-            { type: 'dragover', handler: this.onDragOver },
-            { type: 'dragleave', handler: this.onDragLeave },
-            { type: 'drop', handler: this.onDrop }
+            { type: 'click', selector: '[data-action="browse"]', handler: () => this.element.querySelector('#file-picker').click() },
+            { type: 'click', selector: '[data-action="folder"]', handler: () => this.element.querySelector('#folder-picker').click() },
+            { type: 'click', selector: '[data-action="send"]', handler: () => this.props.onSend() },
+            { type: 'change', selector: 'input[type="file"]', handler: e => this.props.onFiles([...e.target.files]) },
+            { type: 'dragover', handler: e => { e.preventDefault(); this.element.classList.add('active-drag'); } },
+            { type: 'dragleave', handler: e => { if (!this.element.contains(e.relatedTarget)) this.element.classList.remove('active-drag'); } },
+            { type: 'drop', handler: async e => {
+                e.preventDefault(); this.element.classList.remove('active-drag');
+                try { const pending = handleDroppedItems(e.dataTransfer); this.props.onFiles(await pending); }
+                catch (error) { this.props.onError(error); }
+            } }
         ];
     }
-
-    onDragOver(e) {
-        e.preventDefault(); // Required to allow dropping
-        if (!this.state.isDragging) {
-            this.setState({ isDragging: true });
-        }
-    }
-
-    onDragLeave(e) {
-        e.preventDefault();
-        this.setState({ isDragging: false });
-    }
-
-    async onDrop(e) {
-        e.preventDefault();
-        this.setState({ isDragging: false });
-
-        console.log('Parsing dropped items...');
-
-        // 1. Extract files recursively using our helper
-        const extractedFiles = await handleDroppedItems(e.dataTransfer);
-
-        console.log(`Successfully parsed ${extractedFiles.length} files.`);
-
-        // 2. Update the Global Store (Phase 2 integration)
-        // Assuming this.props.store was passed in, we append the new files
-        const currentFiles = this.props.store.state.files || [];
-        this.props.store.state.files = [...currentFiles, ...extractedFiles];
-
-        // If the P2P pipeline is ready, stream the dropped files to the other peer
-        try {
-            if (typeof window !== 'undefined' && typeof window.sendFiles === 'function' && extractedFiles.length > 0) {
-                console.log(`Sending ${extractedFiles.length} file(s) to peer...`);
-                window.sendFiles(extractedFiles).catch(err => console.error('sendFiles error:', err));
-            } else if (typeof window !== 'undefined' && typeof window.testChunker === 'function' && extractedFiles.length > 0) {
-                // Fallback: run chunker test if P2P not yet ready
-                window.testChunker(extractedFiles[0]).catch(err => console.error('testChunker error:', err));
-            }
-        } catch (err) {
-            console.error('Error sending files:', err);
-        }
-    }
 }
-

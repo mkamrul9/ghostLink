@@ -1,6 +1,8 @@
+import { escapeHtml } from '../../utils/format.js';
 import Component from '../Component.js';
 
 export default class SessionSummary extends Component {
+    static watch = ['session', 'ui'];
     template() {
         const session = this.props.store.state.session || {};
         const ui = this.props.store.state.ui || {};
@@ -10,10 +12,10 @@ export default class SessionSummary extends Component {
         const status = ui.connectionStatus || 'idle';
 
         return `
-      <div class="stat-grid">
+      <div class="session-summary"><div class="stat-grid">
         <div class="stat">
           <span class="stat-label">Room</span>
-          <span class="stat-value">${roomId}</span>
+          <span class="stat-value">${escapeHtml(roomId)}</span>
         </div>
         <div class="stat">
           <span class="stat-label">Role</span>
@@ -31,7 +33,7 @@ export default class SessionSummary extends Component {
       <div class="session-actions-footer" style="margin-top: 10px; display: flex; gap: 8px;">
         <button class="btn btn-small" data-action="export">Export Session</button>
         <button class="btn btn-small btn-danger" data-action="clear">Clear History</button>
-      </div>
+      </div></div>
     `;
     }
 
@@ -43,6 +45,8 @@ export default class SessionSummary extends Component {
 
     formatStatus(status) {
         switch (status) {
+            case 'waiting':
+                return 'Waiting for peer';
             case 'connecting':
                 return 'Connecting';
             case 'connected':

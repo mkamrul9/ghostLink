@@ -1,69 +1,22 @@
 import Component from '../Component.js';
-
+import { escapeHtml, formatBytes } from '../../utils/format.js';
 export default class TransferQueue extends Component {
+    static watch = ['transfers', 'ui'];
     template() {
-        const transfers = this.props.store.state.transfers || [];
-        if (transfers.length === 0) {
-            return `<div class="queue-empty">No active transfers yet. Drop a file to begin.</div>`;
-        }
-
-        const items = transfers.map((transfer) => this.renderItem(transfer)).join('');
-        return `<div class="transfer-queue">${items}</div>`;
+        const { transfers, ui } = this.props.store.state;
+        if (!transfers.length) return '<div class="queue-empty"><strong>A clear runway.</strong><p>Your transfer activity will appear here.</p></div>';
+        return `<div class="transfer-queue">${[...transfers].reverse().map(transfer => {
+            const progress = Math.min(100, Math.max(0, Math.round(transfer.progress || 0)));
+            const status = ['sending', 'receiving', 'complete', 'failed', 'cancelled', 'interrupted', 'queued'].includes(transfer.status) ? transfer.status : 'queued';
+            const active = ['sending', 'receiving'].includes(status);
+            return `<article class="transfer-card">
+                <div class="transfer-header"><div class="transfer-info"><div class="transfer-name">${escapeHtml(transfer.name)}</div><div class="transfer-sub">${transfer.direction === 'receive' ? 'Received' : 'Sent'} · ${formatBytes(transfer.size)}</div></div><span class="transfer-status status-${status}">${status}</span></div>
+                <div class="transfer-progress" role="progressbar" aria-label="${escapeHtml(transfer.name)} progress" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><div class="transfer-progress-bar" style="width:${progress}%"></div></div>
+                <div class="transfer-footer"><span>${progress}%</span><span>${active ? formatBytes(transfer.speed || 0) + '/s' : status === 'complete' ? 'Delivered' : 'Stopped'}</span></div>
+                ${transfer.error ? `<p class="inline-error">${escapeHtml(transfer.error)}</p>` : ''}
+                <div class="transfer-actions">${active ? `<button class="btn btn-small" data-action="cancel" data-id="${transfer.id}">Cancel</button>` : ''}${['failed', 'cancelled', 'interrupted'].includes(status) && transfer.direction === 'send' && this.props.canRetry(transfer.id) ? `<button class="btn btn-small" data-action="retry" data-id="${transfer.id}" ${ui.dataChannelStatus === 'open' ? '' : 'disabled'}>Retry</button>` : ''}${status === 'complete' && transfer.direction === 'receive' ? `<button class="btn btn-small" data-action="download" data-id="${transfer.id}">Download</button>` : ''}</div>
+            </article>`;
+        }).join('')}</div>`;
     }
-
-    renderItem(transfer) {
-        const progress = Math.min(100, Math.max(0, Math.round(transfer.progress || 0)));
-        const status = transfer.status || 'queued';
-        const direction = transfer.direction || 'send';
-        const statusLabel = this.formatStatus(status);
-        const directionLabel = direction === 'receive' ? 'Receiving' : 'Sending';
-        const sizeLabel = transfer.size ? this.formatBytes(transfer.size) : 'Unknown size';
-        const speedLabel = transfer.speed ? `${this.formatBytes(transfer.speed)}/s` : '0 B/s';
-
-        return `
-      <div class="transfer-card">
-        <div class="transfer-header">
-          <div>
-            <div class="transfer-name">${transfer.name || 'Untitled file'}</div>
-            <div class="transfer-sub">${directionLabel} • ${sizeLabel}</div>
-          </div>
-          <span class="transfer-status status-${status}">${statusLabel}</span>
-        </div>
-        <div class="transfer-progress">
-          <div class="transfer-progress-bar" style="width: ${progress}%;"></div>
-        </div>
-        <div class="transfer-footer">
-          <span>${progress}%</span>
-          <span>${speedLabel}</span>
-        </div>
-      </div>
-    `;
-    }
-
-    formatStatus(status) {
-        switch (status) {
-            case 'sending':
-                return 'Sending';
-            case 'receiving':
-                return 'Receiving';
-            case 'complete':
-                return 'Complete';
-            case 'failed':
-                return 'Failed';
-            default:
-                return 'Queued';
-        }
-    }
-
-    formatBytes(bytes) {
-        if (!bytes || Number.isNaN(bytes)) return '0 B';
-        const units = ['B', 'KB', 'MB', 'GB'];
-        let value = bytes;
-        let unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.length - 1) {
-            value /= 1024;
-            unitIndex++;
-        }
-        return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-    }
+    events() { return [{ type: 'click', selector: '[data-action]', handler: e => this.props.onAction(e.currentTarget.dataset.action, Number(e.currentTarget.dataset.id)) }]; }
 }

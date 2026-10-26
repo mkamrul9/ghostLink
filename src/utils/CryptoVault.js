@@ -42,7 +42,7 @@ export async function encryptChunk(key, chunkBuffer) {
  * @returns {Promise<CryptoKey>}
  */
 export async function importKeyFromRaw(rawKey) {
-    const keyData = rawKey instanceof Uint8Array ? rawKey.buffer : rawKey;
+    const keyData = rawKey;
     return await crypto.subtle.importKey(
         'raw',
         keyData,

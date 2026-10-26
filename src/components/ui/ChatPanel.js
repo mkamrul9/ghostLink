@@ -1,6 +1,7 @@
 import Component from '../Component.js';
 
 export default class ChatPanel extends Component {
+    static watch = ['chat', 'ui'];
     template() {
         const messages = this.props.store.state.chat || [];
         const ui = this.props.store.state.ui || {};
@@ -18,10 +19,10 @@ export default class ChatPanel extends Component {
         return `
       <div class="chat-panel">
         ${banner}
-        <div class="chat-list">${content}</div>
+        <div class="chat-list" role="log" aria-label="Chat messages" aria-live="polite">${content}</div>
         <div class="chat-status ${canSend ? 'online' : 'offline'}">${statusLabel}</div>
         <form class="chat-form">
-          <input class="chat-input" type="text" placeholder="${canSend ? 'Type a message...' : 'Connect a peer to chat'}" maxlength="500" ${canSend ? '' : 'disabled'} />
+          <input aria-label="Message your peer" data-preserve="chat" class="chat-input" type="text" placeholder="${canSend ? 'Type a message...' : 'Connect a peer to chat'}" maxlength="500" ${canSend ? '' : 'disabled'} />
           <button class="btn btn-chat" type="submit" ${canSend ? '' : 'disabled'}>Send</button>
         </form>
       </div>
@@ -43,6 +44,7 @@ export default class ChatPanel extends Component {
         if (!input) return;
         const text = input.value.trim();
         if (!text) return;
+        input.value = '';
         if (typeof this.props.onSend === 'function') {
             this.props.onSend(text);
         }
@@ -50,7 +52,7 @@ export default class ChatPanel extends Component {
     }
 
     renderMessage(message) {
-        const origin = message.origin || 'peer';
+        const origin = message.origin === 'self' ? 'self' : 'peer';
         const author = this.escapeHtml(message.author || (origin === 'self' ? 'You' : 'Peer'));
         const time = message.ts ? this.formatTime(message.ts) : '';
         const text = this.escapeHtml(message.text || '');

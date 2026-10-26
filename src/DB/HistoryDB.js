@@ -24,12 +24,23 @@ export default class HistoryDB {
 
             request.onsuccess = (event) => {
                 this.db = event.target.result;
+                this.db.onversionchange = () => this.db.close();
                 resolve(this.db);
             };
 
             request.onerror = (event) => {
                 reject(event.target.error);
             };
+        });
+    }
+
+    async clear() {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(['chat', 'transfers', 'peers'], 'readwrite');
+            for (const name of ['chat', 'transfers', 'peers']) tx.objectStore(name).clear();
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
         });
     }
 
@@ -71,7 +82,8 @@ export default class HistoryDB {
             const tx = this.db.transaction([storeName], 'readwrite');
             const store = tx.objectStore(storeName);
             const request = store.put(value);
-            request.onsuccess = () => resolve();
+            tx.oncomplete = () => resolve();
+            tx.onabort = () => reject(tx.error);
             request.onerror = (event) => reject(event.target.error);
         });
     }

@@ -1,4 +1,12 @@
-docs
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+docs/
 commands.txt
-node_modules
-dist

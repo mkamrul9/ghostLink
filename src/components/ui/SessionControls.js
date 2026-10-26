@@ -1,87 +1,46 @@
 import Component from '../Component.js';
-
+import { escapeHtml } from '../../utils/format.js';
 export default class SessionControls extends Component {
-    initialState() {
-        const session = this.props.store.state.session || {};
-        const ui = this.props.store.state.ui || {};
-        return {
-            roomInput: session.roomId || '',
-            signalUrl: ui.signalUrl || ''
-        };
-    }
-
+    static watch = ['session', 'ui'];
+    initialState() { return { roomInput: '' }; }
     template() {
-        const session = this.props.store.state.session || {};
-        const ui = this.props.store.state.ui || {};
-        const roomInput = this.state.roomInput || session.roomId || '';
-        const signalUrl = this.state.signalUrl || ui.signalUrl || '';
-
-        return `
-      <div class="session-controls">
-        <label class="session-label">Room Code</label>
-        <input class="session-input" type="text" value="${roomInput}" placeholder="ghostlink-1234" />
-        <div class="session-actions">
-          <button class="btn btn-primary" data-action="create">Create</button>
-          <button class="btn" data-action="join">Join</button>
-          <button class="btn" data-action="copy">Copy Link</button>
-        </div>
-
-        <label class="session-label">Signaling URL</label>
-        <input class="session-input" type="text" value="${signalUrl}" placeholder="ws://localhost:8080" />
-        <div class="session-hint">Use a hosted wss:// URL when deployed.</div>
-      </div>
-    `;
+        const { session, ui } = this.props.store.state;
+        const busy = ui.booting || ui.connectionStatus === 'connecting';
+        const room = this.state.roomInput || session.roomId || '';
+        return `<div class="session-controls">
+            <p class="section-description">One private room. Two connected devices.</p>
+            <button class="btn btn-primary" data-action="create" ${busy ? 'disabled' : ''}>+ Create a room</button>
+            <div class="input-divider">or join with an invite</div>
+            <label class="session-label" for="room-code">Room code or invite link</label>
+            <input id="room-code" class="session-input" type="text" value="${escapeHtml(room)}" placeholder="Paste a code or link" autocomplete="off" spellcheck="false" data-preserve="room" />
+            <div class="session-actions">
+                <button class="btn" data-action="join" ${busy ? 'disabled' : ''}>Join room</button>
+                <button class="btn" data-action="copy" ${session.roomId ? '' : 'disabled'}>Copy invite</button>
+            </div>
+            ${session.roomId ? '<button class="btn btn-small" data-action="leave">Leave room</button>' : ''}
+            <p class="session-hint">Share invites only with people you trust. Keep both tabs open during a transfer.</p>
+            ${ui.error ? `<p class="inline-error" role="alert">${escapeHtml(ui.error)}</p><button class="btn btn-small" data-action="retry">Reconnect</button>` : ''}
+        </div>`;
     }
-
+    update() {
+        const room = this.props.store.state.session.roomId;
+        if (room !== this.lastRoom) {
+            this.lastRoom = room;
+            this.state.roomInput = room;
+            const input = this.element?.querySelector('#room-code');
+            if (input) input.value = room;
+        }
+        super.update();
+    }
     events() {
         return [
-            { type: 'input', selector: '.session-input', handler: this.handleInput },
-            { type: 'click', selector: '[data-action="create"]', handler: this.handleCreate },
-            { type: 'click', selector: '[data-action="join"]', handler: this.handleJoin },
-            { type: 'click', selector: '[data-action="copy"]', handler: this.handleCopy }
+            { type: 'input', selector: '#room-code', handler: e => { this.state.roomInput = e.target.value; } },
+            { type: 'keydown', selector: '#room-code', handler: e => { if (e.key === 'Enter') this.props.onJoin(this.state.roomInput); } },
+            ...['create', 'join', 'copy', 'leave', 'retry'].map(action => ({ type: 'click', selector: `[data-action="${action}"]`, handler: () => {
+                if (action === 'join') this.props.onJoin(this.state.roomInput || this.props.store.state.session.roomId);
+                else if (action === 'create') { this.state.roomInput = ''; this.props.onCreate(); }
+                else this.props[`on${action[0].toUpperCase() + action.slice(1)}`]?.();
+            } }))
         ];
-    }
-
-    handleInput(e) {
-        const inputs = this.element.querySelectorAll('.session-input');
-        const roomValue = inputs[0] ? inputs[0].value : '';
-        const signalValue = inputs[1] ? inputs[1].value : '';
-        this.setState({ roomInput: roomValue, signalUrl: signalValue });
-        if (typeof this.props.onSignalChange === 'function') {
-            this.props.onSignalChange(signalValue);
-        }
-    }
-
-    handleCreate() {
-        if (typeof this.props.onCreate !== 'function') return;
-        const newRoom = this.props.onCreate();
-        if (newRoom) {
-            this.setState({ roomInput: newRoom });
-        }
-    }
-
-    handleJoin() {
-        if (typeof this.props.onJoin !== 'function') return;
-        const room = this.state.roomInput.trim();
-        if (!room) return;
-        this.props.onJoin(room);
-    }
-
-    handleCopy() {
-        if (typeof this.props.onCopy !== 'function') return;
-        const room = this.state.roomInput.trim();
-        if (!room) return;
-        
-        const url = new URL(window.location.href);
-        url.searchParams.set('room', room);
-        url.searchParams.set('init', 'false');
-        
-        navigator.clipboard.writeText(url.toString()).then(() => {
-            if (window.toast) {
-                window.toast.show('Invite link copied to clipboard!', 'success');
-            }
-        }).catch(err => {
-            console.error('Failed to copy', err);
-        });
     }
 }

@@ -18,10 +18,10 @@ export default class PubSub {
     }
 
     // The Store will 'publish' when the Proxy detects a change
-    publish(event, data = {}) {
+    publish(event, ...args) {
         if (!this.events.hasOwnProperty(event)) {
             return [];
         }
-        return this.events[event].map(callback => callback(data));
+        return this.events[event].map(callback => callback(...args));
     }
 }

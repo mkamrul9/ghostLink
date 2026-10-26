@@ -1,5 +1,5 @@
 // 64KB is the optimal chunk size for WebRTC data channels
-export const CHUNK_SIZE = 64 * 1024;
+export const CHUNK_SIZE = 16 * 1024;
 
 export async function* createChunkGenerator(file) {
     let offset = 0;

@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../utils/format.js';
 import Component from '../Component.js';
 
 export default class SessionStatus extends Component {
@@ -11,7 +12,7 @@ export default class SessionStatus extends Component {
         return `
       <div class="session-status">
         <span class="status-pill status-${status}">Status: ${this.formatStatus(status)}</span>
-        <span class="status-sub">Room: ${roomId}</span>
+        <span class="status-sub">Room: ${escapeHtml(roomId)}</span>
         <span class="status-sub">Channel: ${this.formatChannel(channel)}</span>
       </div>
     `;
@@ -19,6 +20,8 @@ export default class SessionStatus extends Component {
 
     formatStatus(status) {
         switch (status) {
+            case 'waiting':
+                return 'Waiting for peer';
             case 'connecting':
                 return 'Connecting';
             case 'connected':
@@ -36,6 +39,8 @@ export default class SessionStatus extends Component {
         switch (channel) {
             case 'open':
                 return 'Open';
+            case 'waiting':
+                return 'Waiting for peer';
             case 'connecting':
                 return 'Opening';
             default:

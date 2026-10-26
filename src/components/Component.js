@@ -4,106 +4,65 @@ export default class Component {
     constructor(props = {}) {
         this.props = props;
         this.state = this.initialState();
-        this.element = null; // The actual DOM node
-        this.boundEvents = []; // Tracks events for strict memory cleanup
-
-        // If a Store instance is provided via props, subscribe to its state changes
-        // Defensive checks: PubSub.subscribe currently returns a push index, not an unsubscribe function.
-        // We still subscribe if possible, but avoid throwing if the API differs.
-        try {
-            if (props && props.store instanceof Store && props.store.events && typeof props.store.events.subscribe === 'function') {
-                // subscribe returns an unsubscribe function (PubSub now provides it)
-                this._unsubscribeStore = props.store.events.subscribe('stateChange', () => {
-                    this.update();
-                });
-            }
-        } catch (e) {
-            // ignore subscription errors to keep components usable without a Store
+        this.element = null;
+        this.boundEvents = [];
+        if (props.store instanceof Store) {
+            this._unsubscribeStore = props.store.events.subscribe('stateChange', (_state, key) => {
+                if (!this.constructor.watch || this.constructor.watch.includes(key)) this.update();
+            });
         }
     }
-
-
-
-    // Lifecycle methods to be overridden by child classes
     initialState() { return {}; }
     template() { return ''; }
-    onMount() { }
-    onUnmount() { }
-
-    // Reactive state update
-    setState(newState) {
-        this.state = { ...this.state, ...newState };
-        this.update();
-    }
-
-    // Converts the string template into a real DOM node
+    onMount() {}
+    onUnmount() {}
+    setState(patch) { this.state = { ...this.state, ...patch }; this.update(); }
     createDOM() {
         const wrapper = document.createElement('div');
         wrapper.innerHTML = this.template().trim();
-        return wrapper.firstChild;
-        // Assumes template() returns a single root element; multiple roots may be lost or produce unexpected nodes.
+        return wrapper.firstElementChild;
     }
-
-    // Initial render
-    render() {
-        this.element = this.createDOM();
-        this.bindEvents();
-        return this.element;
-    }
-
-    // Updates the DOM when state changes
+    render() { this.element = this.createDOM(); this.bindEvents(); return this.element; }
     update() {
+        if (!this.element) return;
+        // Keep drafts and keyboard focus when an unrelated live update renders a panel.
+        const saved = [...this.element.querySelectorAll('[data-preserve]')].map(input => ({ name: input.getAttribute('data-preserve'), value: input.value, start: input.selectionStart, end: input.selectionEnd, focused: input === document.activeElement }));
+        const scroll = this.element.querySelector('.chat-list');
+        const atBottom = scroll && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 40;
         const newElement = this.createDOM();
         this.element.replaceWith(newElement);
         this.element = newElement;
-        this.bindEvents(); // Re-bind events to the new DOM node
+        this.bindEvents();
+        for (const item of saved) {
+            const input = [...this.element.querySelectorAll('[data-preserve]')].find(node => node.getAttribute('data-preserve') === item.name);
+            if (!input) continue;
+            input.value = item.value;
+            if (item.focused) {
+                input.focus({ preventScroll: true });
+                if (typeof item.start === 'number') input.setSelectionRange(item.start, item.end);
+            }
+        }
+        const nextScroll = this.element.querySelector('.chat-list');
+        if (nextScroll) nextScroll.scrollTop = atBottom ? nextScroll.scrollHeight : scroll?.scrollTop || 0;
     }
-
-    // Event definitions (to be overridden)
     events() { return []; }
-
-    // Automatically binds events and preserves 'this' context
     bindEvents() {
-        // 1. Clean up old events to prevent memory leaks during updates
-        this.boundEvents.forEach(({ type, target, listener }) => {
-            target.removeEventListener(type, listener);
-        });
+        this.boundEvents.forEach(({ target, type, listener }) => target.removeEventListener(type, listener));
         this.boundEvents = [];
-
-        // 2. Attach new events based on the child class's events() array
-        this.events().forEach(({ type, selector, handler }) => {
+        for (const { type, selector, handler } of this.events()) {
             const targets = selector ? this.element.querySelectorAll(selector) : [this.element];
-            const boundHandler = handler.bind(this); // Lock the 'this' context to the class instance
-
-            targets.forEach(target => {
-                target.addEventListener(type, boundHandler);
-                this.boundEvents.push({ type, target, listener: boundHandler });
-            });
-        });
+            for (const target of targets) {
+                const listener = handler.bind(this);
+                target.addEventListener(type, listener);
+                this.boundEvents.push({ target, type, listener });
+            }
+        }
     }
-
-    // Attach the component to the actual webpage
-    mount(container) {
-        container.appendChild(this.render());
-        this.onMount();
-    }
-
-    // Destroy the component safely
+    mount(container) { container.appendChild(this.render()); this.onMount(); }
     unmount() {
         this.onUnmount();
-        // If we subscribed to a Store, unsubscribe now to avoid leaks
-        if (this._unsubscribeStore && typeof this._unsubscribeStore === 'function') {
-            try { this._unsubscribeStore(); } catch (e) { /* ignore */ }
-            this._unsubscribeStore = null;
-        }
-        // Strict garbage collection preparation
-        this.boundEvents.forEach(({ type, target, listener }) => {
-            target.removeEventListener(type, listener);
-        });
-        this.boundEvents = [];
-
-        if (this.element && this.element.parentNode) {
-            this.element.parentNode.removeChild(this.element);
-        }
+        this._unsubscribeStore?.();
+        this.boundEvents.forEach(({ target, type, listener }) => target.removeEventListener(type, listener));
+        this.element?.remove();
     }
 }

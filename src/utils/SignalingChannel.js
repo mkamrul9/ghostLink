@@ -1,62 +1,39 @@
 export default class SignalingChannel {
     constructor(serverUrl) {
         this.serverUrl = serverUrl;
-        this.socket = null;
-        this.roomId = null;
-        this.messageHandlers = []; // Callbacks for when we receive a message
+        this.messageHandlers = [];
+        this.closed = false;
     }
-
     connect(roomId) {
-        this.roomId = roomId;
-
         return new Promise((resolve, reject) => {
-            // Use the browser's native WebSocket API
             this.socket = new WebSocket(this.serverUrl);
-
-            this.socket.onopen = () => {
-                console.log(`Connected to Signaling Server. Joining room: ${roomId}`);
-                // Tell the server which room we want to be in
-                this.send({ type: 'JOIN', roomId: this.roomId });
-                resolve();
+            let joined = false;
+            const timer = setTimeout(() => { reject(new Error('Connection timed out. The server may be waking up; try again.')); this.close(); }, 20000);
+            this.socket.onopen = () => this.send({ type: 'JOIN', roomId });
+            this.socket.onmessage = event => {
+                let data;
+                try { data = JSON.parse(event.data); } catch { return; }
+                if (data.type === 'ERROR') {
+                    clearTimeout(timer);
+                    const error = new Error(data.message);
+                    if (!joined) { reject(error); this.close(); } else this.onError?.(error);
+                    return;
+                }
+                if (data.type === 'JOINED') { joined = true; clearTimeout(timer); resolve(data); }
+                for (const handler of this.messageHandlers) Promise.resolve(handler(data)).catch(error => this.onError?.(error));
             };
-
-            this.socket.onerror = (err) => {
-                console.error('WebSocket Error:', err);
-                reject(err);
-            };
-
-            this.socket.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                // Log incoming raw signaling for easier debugging
-                console.log('Signaling incoming:', data);
-                // Trigger all registered handlers when a message arrives
-                this.messageHandlers.forEach(handler => handler(data));
+            this.socket.onerror = () => { if (!joined) { clearTimeout(timer); reject(new Error('Cannot reach the connection server. Check your network and retry.')); } };
+            this.socket.onclose = () => {
+                clearTimeout(timer);
+                if (!joined) reject(new Error('The connection server closed before joining. Please retry.'));
+                if (!this.closed) this.onClose?.();
             };
         });
     }
-
-    // Registers a function to run when a message is received
-    onMessage(handler) {
-        this.messageHandlers.push(handler);
-    }
-
-    // Sends a JSON object to the relay server
+    onMessage(handler) { this.messageHandlers.push(handler); }
     send(data) {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(data));
-        } else {
-            console.warn('Cannot send message, WebSocket is not open.');
-        }
+        if (this.socket?.readyState !== WebSocket.OPEN) throw new Error('Connection server is unavailable.');
+        this.socket.send(JSON.stringify(data));
     }
-
-    // Closes the WebSocket connection cleanly
-    close() {
-        if (this.socket) {
-            try {
-                this.socket.close();
-            } catch (e) {
-                // ignore close errors
-            }
-        }
-    }
+    close() { this.closed = true; this.socket?.close(); }
 }
