@@ -14,7 +14,8 @@ export function createApp(options = {}) {
     if (!Array.isArray(iceServers)) throw new Error('ICE_SERVERS must be a JSON array.');
     const maxClients = options.maxClients ?? Number(process.env.MAX_CLIENTS || 10000);
     const maxFileSize = options.maxFileSize ?? Number(process.env.MAX_FILE_SIZE || 268435456);
-    const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+    if (!Number.isSafeInteger(maxClients) || maxClients < 1 || !Number.isSafeInteger(maxFileSize) || maxFileSize < 1) throw new Error('MAX_CLIENTS and MAX_FILE_SIZE must be positive integers.');
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(origin => origin.trim()).filter(Boolean);
     const server = http.createServer(async (req, res) => {
         const headers = {
             'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
@@ -47,6 +48,10 @@ export function createApp(options = {}) {
             respond(error.code === 'ENOENT' || error.code === 'EISDIR' ? 404 : 400, '{"error":"Invalid or missing resource"}');
         }
     });
+    server.headersTimeout = 15000;
+    server.requestTimeout = 30000;
+    server.keepAliveTimeout = 5000;
+    server.maxConnections = maxClients + 1000;
     const wss = new WebSocketServer({ noServer: true, maxPayload: 65536, perMessageDeflate: false });
     const send = (ws, data) => {
         if (ws.readyState !== WebSocket.OPEN) return;

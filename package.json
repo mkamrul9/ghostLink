@@ -14,16 +14,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/blue9kamrul/ghostLink.git"
+    "url": "git+https://github.com/mkamrul9/ghostLink.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/blue9kamrul/ghostLink/issues"
+    "url": "https://github.com/mkamrul9/ghostLink/issues"
   },
-  "homepage": "https://github.com/blue9kamrul/ghostLink#readme",
+  "homepage": "https://github.com/mkamrul9/ghostLink#readme",
   "dependencies": {
     "ws": "^8.22.0"
   },

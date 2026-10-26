@@ -1,104 +1,72 @@
+const timeFields = { chat: 'ts', transfers: 'startedAt', peers: 'lastSeen' };
+const retention = 500;
 export default class HistoryDB {
-    constructor() {
-        this.dbName = 'GhostLinkHistory';
-        this.version = 1;
-        this.db = null;
-    }
-
-    async init() {
+    constructor() { this.dbName = 'GhostLinkHistory'; this.db = null; }
+    init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, this.version);
-
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('chat')) {
-                    db.createObjectStore('chat', { keyPath: 'id' });
-                }
-                if (!db.objectStoreNames.contains('transfers')) {
-                    db.createObjectStore('transfers', { keyPath: 'id' });
-                }
-                if (!db.objectStoreNames.contains('peers')) {
-                    db.createObjectStore('peers', { keyPath: 'id' });
+            const request = indexedDB.open(this.dbName, 2);
+            request.onupgradeneeded = () => {
+                for (const [name, field] of Object.entries(timeFields)) {
+                    const store = request.result.objectStoreNames.contains(name) ? request.transaction.objectStore(name) : request.result.createObjectStore(name, { keyPath: 'id' });
+                    if (!store.indexNames.contains('byTime')) store.createIndex('byTime', field);
                 }
             };
-
-            request.onsuccess = (event) => {
-                this.db = event.target.result;
+            request.onsuccess = () => {
+                this.db = request.result;
                 this.db.onversionchange = () => this.db.close();
                 resolve(this.db);
             };
-
-            request.onerror = (event) => {
-                reject(event.target.error);
-            };
+            request.onerror = () => reject(request.error);
+            request.onblocked = () => reject(new Error('Close older app tabs to update local history.'));
         });
     }
-
-    async clear() {
+    clear() {
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['chat', 'transfers', 'peers'], 'readwrite');
-            for (const name of ['chat', 'transfers', 'peers']) tx.objectStore(name).clear();
+            const tx = this.db.transaction(Object.keys(timeFields), 'readwrite');
+            for (const name of Object.keys(timeFields)) tx.objectStore(name).clear();
             tx.oncomplete = resolve;
-            tx.onerror = () => reject(tx.error);
-            tx.onabort = () => reject(tx.error);
+            tx.onerror = tx.onabort = () => reject(tx.error);
         });
     }
-
-    async saveChat(message) {
-        return this._put('chat', message);
-    }
-
-    async saveTransfer(transfer) {
-        return this._put('transfers', transfer);
-    }
-
-    async savePeer(peer) {
-        return this._put('peers', peer);
-    }
-
-    async loadChat(limit = 100) {
-        const items = await this._getAll('chat');
-        const sorted = items.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-        return sorted.slice(-limit);
-    }
-
-    async loadTransfers(limit = 100) {
-        const items = await this._getAll('transfers');
-        const sorted = items.sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
-        return sorted.slice(-limit);
-    }
-
-    async loadPeers() {
-        const items = await this._getAll('peers');
-        return items.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
-    }
-
-    _put(storeName, value) {
+    saveChat(value) { return this._put('chat', value); }
+    saveTransfer(value) { return this._put('transfers', value); }
+    savePeer(value) { return this._put('peers', value); }
+    async loadChat(limit = 100) { return (await this._getAll('chat', limit)).reverse(); }
+    async loadTransfers(limit = 100) { return (await this._getAll('transfers', limit)).reverse(); }
+    loadPeers() { return this._getAll('peers', 20); }
+    _put(name, value) {
         return new Promise((resolve, reject) => {
-            if (!this.db) {
-                reject(new Error('HistoryDB is not initialized'));
-                return;
-            }
-            const tx = this.db.transaction([storeName], 'readwrite');
-            const store = tx.objectStore(storeName);
-            const request = store.put(value);
-            tx.oncomplete = () => resolve();
-            tx.onabort = () => reject(tx.error);
-            request.onerror = (event) => reject(event.target.error);
+            if (!this.db) return reject(new Error('History is unavailable.'));
+            const tx = this.db.transaction([name], 'readwrite');
+            const store = tx.objectStore(name);
+            store.put(value);
+            const count = store.count();
+            count.onsuccess = () => {
+                let extra = count.result - retention;
+                if (extra <= 0) return;
+                const cursor = store.index('byTime').openCursor();
+                cursor.onsuccess = () => {
+                    const item = cursor.result;
+                    if (item && extra-- > 0) { item.delete(); item.continue(); }
+                };
+            };
+            tx.oncomplete = resolve;
+            tx.onerror = tx.onabort = () => reject(tx.error);
         });
     }
-
-    _getAll(storeName) {
+    _getAll(name, limit) {
         return new Promise((resolve, reject) => {
-            if (!this.db) {
-                reject(new Error('HistoryDB is not initialized'));
-                return;
-            }
-            const tx = this.db.transaction([storeName], 'readonly');
-            const store = tx.objectStore(storeName);
-            const request = store.getAll();
-            request.onsuccess = (event) => resolve(event.target.result || []);
-            request.onerror = (event) => reject(event.target.error);
+            if (!this.db) return reject(new Error('History is unavailable.'));
+            const result = [];
+            const tx = this.db.transaction([name], 'readonly');
+            const cursor = tx.objectStore(name).index('byTime').openCursor(null, 'prev');
+            cursor.onsuccess = () => {
+                if (!cursor.result || result.length >= limit) return;
+                result.push(cursor.result.value);
+                cursor.result.continue();
+            };
+            tx.oncomplete = () => resolve(result);
+            tx.onerror = tx.onabort = () => reject(tx.error);
         });
     }
 }

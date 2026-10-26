@@ -56,7 +56,7 @@ const addTransfer = (transfer, file) => {
 const updateTransfer = (id, patch) => {
     const terminal = ['complete', 'failed', 'cancelled', 'interrupted'].includes(patch.status);
     const now = performance.now();
-    if (!terminal && now - (progressTicks.get(id) || 0) < 200) return;
+    if (!patch.status && now - (progressTicks.get(id) || 0) < 200) return;
     progressTicks.set(id, now);
     let changed;
     store.state.transfers = store.state.transfers.map(item => item.id === id ? (changed = { ...item, ...patch }) : item);
@@ -201,7 +201,7 @@ async function connectRoom(input, automatic = false) {
                 toast.show('The connection server disconnected. Your current peer session can continue.', 'warning');
                 return;
             }
-            ui({ connectionStatus: 'disconnected', error: 'The connection server disconnected. ReconnectingÃ¢â‚¬Â¦' });
+            ui({ connectionStatus: 'disconnected', error: 'The connection server disconnected. ReconnectingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' });
             if (reconnectAttempt < 3) reconnectTimer = setTimeout(() => { reconnectAttempt++; connectRoom(room, true); }, Math.min(10000, 1000 * 2 ** reconnectAttempt) + Math.random() * 500);
             else ui({ error: 'Unable to reconnect. Check your network and try again.' });
         };
@@ -222,7 +222,7 @@ async function sendStaged() {
     if (!transfers || rtc?.dataChannel?.readyState !== 'open') return report(new Error('Connect to a peer first.'));
     const selected = store.state.files;
     store.state.files = [];
-    await transfers.sendFiles(selected);
+    try { await transfers.sendFiles(selected); } catch (error) { report(error); }
 }
 async function vaultAction(action, id) {
     try {
@@ -232,7 +232,7 @@ async function vaultAction(action, id) {
             await refreshVault();
             toast.show('File deleted from this device.', 'success');
         } else {
-            toast.show('Preparing your downloadÃ¢â‚¬Â¦', 'info');
+            toast.show('Preparing your downloadÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦', 'info');
             const { blob, name } = await db.getFileBlob(id);
             downloadBlob(blob, name);
         }
@@ -254,7 +254,7 @@ mount(TransferQueue, 'queue-slot', {
     canRetry: id => retryFiles.has(id),
     onAction: (action, id) => {
         if (action === 'cancel') transfers?.cancel(id);
-        else if (action === 'retry') { const file = retryFiles.get(id); if (file && transfers) transfers.sendFiles([file]); }
+        else if (action === 'retry') { const file = retryFiles.get(id); if (file && transfers) transfers.sendFiles([file]).catch(report); }
         else vaultAction(action, id);
     }
 });
@@ -283,7 +283,7 @@ mount(SessionStatus, 'session-status-slot');
 mount(SessionSummary, 'session-summary-slot', {
     onExport: () => downloadBlob(new Blob([JSON.stringify({ app: 'Mystic', exportedAt: new Date().toISOString(), chat: store.state.chat, transfers: store.state.transfers, peers: store.state.peers }, null, 2)], { type: 'application/json' }), `mystic-session-${Date.now()}.json`),
     onClear: async () => {
-        if (store.state.transfers.some(item => ['sending', 'receiving'].includes(item.status))) return toast.show('Wait for active transfers to finish before clearing history.', 'warning');
+        if (store.state.transfers.some(item => ['queued', 'sending', 'receiving'].includes(item.status))) return toast.show('Wait for active transfers to finish before clearing history.', 'warning');
         if (!await toast.confirm('Clear chat, transfer and connection history on this device? Vault files are kept separately.')) return;
         try { await historyDb.clear(); store.state.chat = []; store.state.transfers = []; store.state.peers = []; retryFiles.clear(); toast.show('History cleared.', 'success'); }
         catch (error) { report(error); }
@@ -303,14 +303,14 @@ mount(SettingsPanel, 'settings-slot', { onSave: (name, serverUrl) => {
     } catch (error) { report(error); }
 } });
 const graph = mount(SpeedGraph, 'speed-graph-slot');
-const graphTimer = setInterval(() => graph.addSpeedData(store.state.transfers.filter(item => ['sending', 'receiving'].includes(item.status)).reduce((sum, item) => sum + (item.speed || 0), 0)), 1000);
+const graphTimer = setInterval(() => graph.addSpeedData(store.state.transfers.filter(item => ['queued', 'sending', 'receiving'].includes(item.status)).reduce((sum, item) => sum + (item.speed || 0), 0)), 1000);
 const ready = (async () => {
     const results = await Promise.allSettled([
         db.init().then(refreshVault),
         historyDb.init().then(async () => {
             const [chat, savedTransfers, peers] = await Promise.all([historyDb.loadChat(200), historyDb.loadTransfers(200), historyDb.loadPeers()]);
             store.state.chat = chat;
-            store.state.transfers = savedTransfers.map(item => ['sending', 'receiving'].includes(item.status) ? { ...item, status: 'interrupted', speed: 0, error: 'The previous session ended. Select this file again to resend.' } : item);
+            store.state.transfers = savedTransfers.map(item => ['queued', 'sending', 'receiving'].includes(item.status) ? { ...item, status: 'interrupted', speed: 0, error: 'The previous session ended. Select this file again to resend.' } : item);
             store.state.peers = peers.map(peer => ({ ...peer, status: 'offline' }));
         }),
         fetch('/api/config').then(response => { if (!response.ok) throw new Error(); return response.json(); }).then(value => { config = value; })
@@ -329,6 +329,6 @@ window.addEventListener('hashchange', joinFromUrl);
 window.addEventListener('offline', () => ui({ error: 'You are offline. Check your internet connection.' }));
 window.addEventListener('online', () => { if (store.state.session.roomId && rtc?.dataChannel?.readyState !== 'open') connectRoom(store.state.session.roomId); else ui({ error: '' }); });
 window.addEventListener('beforeunload', event => {
-    if (store.state.transfers.some(item => ['sending', 'receiving'].includes(item.status))) { event.preventDefault(); event.returnValue = ''; }
+    if (store.state.transfers.some(item => ['queued', 'sending', 'receiving'].includes(item.status))) { event.preventDefault(); event.returnValue = ''; }
 });
 window.addEventListener('pagehide', () => { teardown(); clearInterval(graphTimer); graph.unmount(); });

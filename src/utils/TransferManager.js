@@ -12,6 +12,8 @@ export default class TransferManager {
         this.db = db;
         this.options = options;
         this.receivers = new Map();
+        this.queued = new Map();
+        this.failures = new Map();
         this.senders = new Map();
         this.waiters = new Map();
         rtc.onControl = message => this.control(message);
@@ -41,21 +43,30 @@ export default class TransferManager {
     }
     resolve(key) { this.waiters.get(key)?.(); }
     sendFiles(files) {
+        if (this.closed) return Promise.reject(new Error('Reconnect to a peer before sending.'));
+        const jobs = files.map(file => {
+            let id;
+            do { id = crypto.getRandomValues(new Uint32Array(1))[0]; } while (this.queued.has(id) || this.senders.has(id) || this.receivers.has(id));
+            const job = { id, file };
+            this.queued.set(id, job);
+            this.options.onAdd?.({ id, name: file.name, size: file.size, direction: 'send', status: 'queued', progress: 0, startedAt: Date.now() }, file);
+            return job;
+        });
         this.queue = this.queue.catch(() => {}).then(async () => {
-            for (const file of files) {
+            for (const { id, file } of jobs) {
+                if (!this.queued.has(id)) continue;
+                this.queued.delete(id);
                 if (this.closed) break;
-                await this.sendFile(file);
+                await this.sendFile(file, id);
             }
         });
         return this.queue;
     }
-    async sendFile(file) {
-        const fileId = crypto.getRandomValues(new Uint32Array(1))[0];
+    async sendFile(file, fileId) {
         const controller = new AbortController();
         const signal = controller.signal;
-        const transfer = { id: fileId, name: file.name, size: file.size, direction: 'send', status: 'sending', progress: 0, startedAt: Date.now() };
         this.senders.set(fileId, controller);
-        this.options.onAdd?.(transfer, file);
+        this.options.onProgress?.(fileId, { status: 'sending', startedAt: Date.now() });
         try {
             if (file.size > this.options.maxFileSize) throw new Error('This file exceeds the transfer size limit.');
             const key = await generateEncryptionKey();
@@ -92,12 +103,14 @@ export default class TransferManager {
             await complete;
             this.options.onProgress?.(fileId, { status: 'complete', progress: 100, speed: 0, completedAt: Date.now() });
         } catch (error) {
-            this.options.onProgress?.(fileId, { status: signal.aborted ? 'cancelled' : 'failed', error: error.message, speed: 0 });
+            const failure = this.failures.get(fileId);
+            this.options.onProgress?.(fileId, { status: failure ? 'failed' : signal.aborted ? 'cancelled' : 'failed', error: failure?.message || error.message, speed: 0 });
             try { this.rtc.sendControl({ type: 'FILE_CANCEL', fileId }); } catch { /* disconnected */ }
-            this.options.onError?.(error);
+            if (!signal.aborted || this.failures.has(fileId)) this.options.onError?.(this.failures.get(fileId) || error);
         } finally {
             controller.abort();
             this.senders.delete(fileId);
+            this.failures.delete(fileId);
         }
     }
     async control(message) {
@@ -108,6 +121,7 @@ export default class TransferManager {
         if (message.type === 'FILE_COMPLETE') return this.resolve(`${id}:complete`);
         if (message.type === 'FILE_CANCEL') { this.cancel(id, false); return; }
         if (message.type === 'FILE_ERROR') {
+            this.failures.set(id, new Error(String(message.message || 'Peer could not receive this file.').slice(0, 200)));
             for (const [key, finish] of this.waiters) if (key.startsWith(`${id}:`)) finish(new Error(String(message.message || 'Peer could not receive this file.').slice(0, 200)));
             this.cancel(id, false);
             return;
@@ -157,6 +171,7 @@ export default class TransferManager {
         this.options.onVaultChange?.();
     }
     cancel(id, notify = true) {
+        if (this.queued.delete(id)) this.options.onProgress?.(id, { status: 'cancelled', speed: 0 });
         this.senders.get(id)?.abort();
         if (this.receivers.delete(id)) this.options.onProgress?.(id, { status: 'cancelled', speed: 0 });
         for (const [key, finish] of this.waiters) if (key.startsWith(`${id}:`)) finish(new Error('Transfer cancelled.'));
@@ -166,6 +181,11 @@ export default class TransferManager {
     close() {
         this.closed = true;
         this.worker.terminate();
+        for (const id of [...this.queued.keys()]) {
+            this.queued.delete(id);
+            this.options.onProgress?.(id, { status: 'interrupted', error: 'The session ended before this file was sent. Reconnect and retry.', speed: 0 });
+        }
+        for (const id of this.senders.keys()) this.failures.set(id, new Error('The peer disconnected. Reconnect and retry.'));
         for (const id of [...this.senders.keys(), ...this.receivers.keys()]) this.cancel(id, false);
     }
 }
