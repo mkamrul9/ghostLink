@@ -1,3 +1,4 @@
+import { trimTransferHistory } from './utils/TransferState.js';
 import { compactOverlay } from './utils/viewport.js';
 import Store from './store/Store.js';
 import DashboardShell from './components/ui/DashboardShell.js';
@@ -58,7 +59,7 @@ const refreshVault = async () => {
 };
 const addTransfer = (transfer, file) => {
     if (file) retryFiles.set(transfer.id, file);
-    store.state.transfers = [...store.state.transfers.slice(-199), transfer];
+    store.state.transfers = trimTransferHistory([...store.state.transfers, transfer]);
     save(historyDb.saveTransfer(transfer));
 };
 const updateTransfer = (id, patch) => {
@@ -67,7 +68,7 @@ const updateTransfer = (id, patch) => {
     if (!patch.status && now - (progressTicks.get(id) || 0) < 200) return;
     progressTicks.set(id, now);
     let changed;
-    store.state.transfers = store.state.transfers.map(item => item.id === id ? (changed = { ...item, ...patch }) : item);
+    store.state.transfers = trimTransferHistory(store.state.transfers.map(item => item.id === id ? (changed = { ...item, ...patch }) : item));
     if (changed && terminal) save(historyDb.saveTransfer(changed));
 };
 const addChat = message => {
