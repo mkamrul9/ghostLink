@@ -9,6 +9,7 @@ import { CHUNK_SIZE } from '../src/helpers/FileChunker.js';
 import { backupStream, restoreBackup } from '../src/utils/LocalBackup.js';
 import { createZipStream, createZip } from '../src/utils/ZipDownload.js';
 import { directoryFile, namedFile, filePath, fileTree, nestedFiles } from '../src/utils/FileLibrary.js';
+import { unpackEncryptedChunk, packEncryptedChunk } from '../src/utils/BinaryPacker.js';
 import { saveStream } from '../src/utils/SaveToDevice.js';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 async function database(t, name = crypto.randomUUID()) { const db = new DBManager(); db.dbName = name; await db.init(); t.after(() => db.close()); return db; }
@@ -113,4 +114,13 @@ test('direct saving writes a 300 MiB stream incrementally and aborts a damaged s
     await saveStream({ name:'large.bin', size:300 * 1024 ** 2, source:async function* () { const chunk = new Uint8Array(1024 ** 2); for(let i=0;i<300;i++) yield chunk; } });
     assert.equal(size, 300 * 1024 ** 2); assert.equal(closed,true);
     await assert.rejects(saveStream({ name:'bad.bin', size:1, source:async function* () { yield new Uint8Array([1]); throw new Error('damaged'); } }), /damaged/); assert.equal(aborted,true);
+});
+
+
+test('download rechecks full-file integrity and rejects reordered authenticated chunks in local storage', async t => {
+ const a=await database(t),b=await database(t),pair=paired(t,a,b),data=new Uint8Array(CHUNK_SIZE*2);data.fill(19,0,CHUNK_SIZE);data.fill(71,CHUNK_SIZE);
+ await pair.sender.sendFiles([new File([data],'saved.bin')]);await pair.drain();const meta=(await b.getAllMetadata())[0];
+ const first=unpackEncryptedChunk((await b.getChunk(meta.fileId,0)).data),second=unpackEncryptedChunk((await b.getChunk(meta.fileId,1)).data);
+ await b.saveChunk(meta.fileId,0,packEncryptedChunk(meta.fileId,0,second.iv,second.encryptedPayload));await b.saveChunk(meta.fileId,1,packEncryptedChunk(meta.fileId,1,first.iv,first.encryptedPayload));
+ await assert.rejects(b.getFileBlob(meta.fileId),/verification failed/);
 });

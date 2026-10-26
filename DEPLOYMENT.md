@@ -48,7 +48,7 @@ The image runs as a non-root user and has a `/healthz` health check. Put it behi
 - Keep this version on one signaling instance. Multiple instances need shared room routing and peer-disconnect coordination before horizontal scaling.
 - Set monitoring on `/healthz`, restarts and connection failures. Do not log SDP, room codes, file names, chat or file keys. This implementation logs only its listening port.
 - Use an always-on hosting tier for a public service with uptime expectations. Establish privacy/support policies and a browser/device compatibility matrix.
-- Test mobile storage limits and the 256 MiB memory-save fallback. Supported desktop browsers can stream larger downloads. Received files and protected keys live only in each browser profile; users can save encrypted backups locally.
+- Test mobile storage limits, native saving, browser-owned download streams and the 256 MiB fallback used when streaming is unavailable. Downloads need Mystic open until finished. The service worker only generates local download responses; it stores and uploads no file contents. Supported desktop browsers can stream larger downloads. Received files and protected keys live only in each browser profile; users can save encrypted backups locally.
 
 ## Rollback
 

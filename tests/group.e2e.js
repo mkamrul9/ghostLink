@@ -31,6 +31,11 @@ try{
  // A rejoined browser keeps its device identity; re-adding the same file verifies saved bytes.
  await bob.reload();await bob.locator('.status-connected').waitFor();await view(alice,'Send files');await alice.getByRole('checkbox',{name:'Send to Bob',exact:true}).check();await alice.getByRole('checkbox',{name:'Send to Cara',exact:true}).uncheck();
  await alice.locator('#file-picker').setInputFiles({name:'shared.bin',mimeType:'application/octet-stream',buffer:bytes});await alice.getByRole('button',{name:'Send 1 selected file',exact:true}).click();await complete(alice,4);assert.equal((await saved(bob)).length,1);
+ // Large selections stay usable: paging limits DOM size without dropping staged files.
+ await dana.evaluate(()=>{const transfer=new DataTransfer();for(let i=0;i<750;i++)transfer.items.add(new File([],`item-${i}.txt`));const input=document.querySelector('#file-picker');input.files=transfer.files;input.dispatchEvent(new Event('change'));});
+ assert.equal(await dana.locator('.send-browser .file-row').count(),200);await dana.getByRole('button',{name:'Show more (200 of 750)',exact:true}).click();assert.equal(await dana.locator('.send-browser .file-row').count(),400);
+ await dana.getByRole('checkbox',{name:'Select all files',exact:true}).uncheck();await dana.getByRole('checkbox',{name:'Select all files',exact:true}).check();await dana.locator('.selection-bar').getByText('750 selected',{exact:false}).waitFor();assert.equal(await dana.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await dana.evaluate(()=>window.scrollTo(0,0)); await dana.screenshot({path:'test-results/mystic-mobile-large-folder.png',fullPage:true});
  assert.equal(await bob.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);
- console.log('PASS: four-device room, explicit recipients, new-device exclusion, matching checksums, group messages, departure isolation and same-profile resume');
+ console.log('PASS: four-device room, explicit recipients, new-device exclusion, matching checksums, group messages, departure isolation same-profile resume, and 750-file staging on a phone layout');
 }catch(error){for(const context of browser.contexts())for(const page of context.pages())console.error((await page.locator('body').innerText()).slice(-5000));console.error(error);throw error;}finally{await browser.close();await app.close();}

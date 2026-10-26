@@ -5,16 +5,16 @@ import { createApp } from '../server.js';
 const app = createApp({ iceServers: [] }); await new Promise(resolve => app.server.listen(0,'127.0.0.1',resolve));
 const base = `http://127.0.0.1:${app.server.address().port}`, browser = await chromium.launch({ headless:true, channel:process.env.BROWSER_CHANNEL || undefined });
 const errors = [], contexts = [];
-async function device(width = 1280) {
+async function device(width = 1280, clock = false) {
  const context = await browser.newContext({ viewport:{width,height:900}, acceptDownloads:true }); contexts.push(context);
  await context.addInitScript(() => { window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined; });
- const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message)); await page.goto(base);
+ const page = await context.newPage(); if(clock)await page.clock.install(); page.on('pageerror', error => errors.push(error.message)); await page.goto(base);
  await page.waitForFunction(() => !document.querySelector('[data-action="create"]').disabled); return page;
 }
 const view = (page,name) => page.locator('.nav-list').getByRole('button',{name,exact:true}).click();
 async function password(page, title, value, button, confirm = false) { const dialog = page.getByRole('dialog',{name:title,exact:true}); await dialog.getByLabel(/^(Backup p|P)assphrase$/, {exact:true}).fill(value); if(confirm) await dialog.getByLabel('Confirm passphrase',{exact:true}).fill(value); await dialog.getByRole('button',{name:button,exact:true}).click(); }
 try {
- const sender = await device(), receiver = await device(390);
+ const sender = await device(), receiver = await device(390, true);
  await sender.getByRole('button',{name:'Create a room',exact:true}).click(); await sender.locator('.status-waiting').waitFor();
  await receiver.goto(sender.url()); await Promise.all([sender.locator('.status-connected').waitFor(), receiver.locator('.status-connected').waitFor()]);
  await sender.getByRole('button',{name:'New empty folder',exact:true}).click();
@@ -43,5 +43,7 @@ try {
  await restored.getByRole('button',{name:'Download notes.txt',exact:true}).click(); await restored.waitForFunction(()=>window.__closed);
  const bytes = await restored.evaluate(()=>window.__saved.flat()); assert.equal(Buffer.from(bytes).toString(),'my private notes');
  assert.equal(await receiver.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
- assert.deepEqual(errors,[]); console.log('PASS: empty folder handoff, mobile passphrase protection, locked reload, encrypted backup/restore, and streaming browser save');
+ await receiver.clock.fastForward(11*60*1000); await receiver.getByRole('button',{name:'Unlock files',exact:true}).waitFor();
+ await receiver.evaluate(()=>window.scrollTo(0,0)); await receiver.screenshot({path:'test-results/mystic-mobile-security.png',fullPage:true});
+ assert.deepEqual(errors,[]); console.log('PASS: empty folder handoff, mobile passphrase protection, locked reload, encrypted backup/restore, streaming browser save, and automatic idle locking');
 } finally { await browser.close(); await app.close(); }

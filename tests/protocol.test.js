@@ -62,3 +62,12 @@ test('local history retains the newest 500 entries and loads recent entries in c
     assert.equal(all.length, 500); assert.equal(all[0].ts, 5); assert.equal(all.at(-1).ts, 504);
     const recent = await db.loadChat(2); assert.deepEqual(recent.map(item => item.ts), [503, 504]);
 });
+
+test('incoming admission is visible before asynchronous storage work and pending receives can be cancelled', async t => {
+ const {manager,meta,db,added,changes,messages}=await fixture(t);let release;
+ const original=db.getMetadata.bind(db);db.getMetadata=async id=>{await new Promise(resolve=>{release=resolve;});return original(id);};
+ const pending=manager.control(meta);
+ for(let i=0;i<20 && !release;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(added.at(-1).status,'receiving');manager.cancel(meta.fileId);release();await pending;
+ assert.equal(manager.receivers.size,0);assert.equal(manager.pendingReceives.size,0);assert.equal(changes.at(-1).status,'cancelled');assert.notEqual(messages.at(-1).type,'FILE_READY');
+});

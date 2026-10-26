@@ -10,11 +10,12 @@
     "test": "node --test tests/*.test.js",
     "test:e2e": "node tests/browser.e2e.js",
     "test:load": "node scripts/load-test.mjs",
-    "verify": "npm run check && npm test && npm run test:e2e && npm run test:recovery && npm run test:group && npm run test:mobile",
+    "verify": "npm run check && npm test && npm run test:e2e && npm run test:recovery && npm run test:group && npm run test:large && npm run test:mobile",
     "test:mobile": "node tests/mobile.e2e.js",
     "build:crypto": "node scripts/build-crypto.mjs",
     "test:recovery": "node tests/recovery.e2e.js",
-    "test:group": "node tests/group.e2e.js"
+    "test:group": "node tests/group.e2e.js",
+    "test:large": "node tests/large.e2e.js"
   },
   "repository": {
     "type": "git",

@@ -25,8 +25,9 @@ import showTutorial from './components/ui/Tutorial.js';
 import { showShareRoom, inviteUrl } from './utils/ShareRoom.js';
 import { addFiles, directoryFile, filePath, namedFile, movePaths, renamedPath, safePath } from './utils/FileLibrary.js';
 import { createZipStream } from './utils/ZipDownload.js';
-import { saveStream, saveFolderToDevice } from './utils/SaveToDevice.js';
+import { saveStream, saveFolderToDevice, activeSaves } from './utils/SaveToDevice.js';
 import { backupStream, restoreBackup } from './utils/LocalBackup.js';
+import { prepareStreamDownloads } from './utils/StreamDownload.js';
 import SecurityPanel from './components/ui/SecurityPanel.js';
 import { textDialog } from './utils/dialogs.js';
 import { createRoomCode, normalizeRoomCode } from './utils/RoomCode.js';
@@ -54,7 +55,7 @@ let persistenceWarning = false;
 let selectedInitialPeer = false;
 let recipientDevices = new Set();
 const ui = patch => { store.state.ui = { ...store.state.ui, ...patch }; };
-const report = error => { if (error.name !== 'AbortError') toast.show(error.message || String(error), 'error'); };
+const report = error => { if (error?.name !== 'AbortError') toast.show(error?.message || String(error), 'error'); };
 const save = promise => promise.catch(() => {
     if (!persistenceWarning) { persistenceWarning = true; toast.show('Browser history could not be saved. Your live session still works.', 'warning'); }
 });
@@ -74,7 +75,7 @@ async function securityAction(action, file) {
             store.state.vaultState = { ...store.state.vaultState, persistent };
             toast.show(persistent ? 'The browser will keep local files until you clear site data.' : 'The browser did not grant storage protection. Save a backup for important files.', 'info'); return;
         }
-        if (['protect','lock','restore','backup'].includes(action) && activeTransfers()) throw new Error('Wait until your transfers finish first.');
+        if (['protect','lock','restore','backup'].includes(action) && (activeTransfers() || activeSaves)) throw new Error('Wait until your transfers and downloads finish first.');
         if (action === 'lock') { db.lock(); await refreshVault(); return; }
         let password;
         if (action === 'protect' && db.protection) {
@@ -85,6 +86,7 @@ async function securityAction(action, file) {
             password = await textDialog({ title: ({protect:'Protect your files',unlock:'Unlock your files',backup:'Save an encrypted backup',restore:'Restore your backup'})[action], label: action === 'backup' || action === 'restore' ? 'Backup passphrase' : 'Passphrase', secret: true, confirmSecret: ['protect','backup'].includes(action), hint: ['protect','backup'].includes(action) ? 'Use at least 12 characters. Keep it somewhere safe; there is no reset.' : '', button: ({protect:'Protect files',unlock:'Unlock',backup:'Choose where to save',restore:'Restore'})[action], validate: value => { if (['protect','backup'].includes(action) && value.length < 12) throw new Error('Use at least 12 characters.'); } });
             if (password === null) return;
         }
+        if (['protect','lock','restore','backup'].includes(action) && (activeTransfers() || activeSaves)) throw new Error('Wait until your transfers and downloads finish first.');
         // Open the save picker directly from the passphrase dialog's submit activation.
         let operation;
         if (action === 'backup') {
@@ -297,6 +299,7 @@ async function downloadReceived(ids, folder = false, nativeFolder = false) {
 }
 async function libraryAction(mode, action, ids) {
     try {
+        if (activeSaves) throw new Error('Wait until your download finishes before changing saved files.');
         if (action === 'unlock') return securityAction('unlock');
         const entries = entriesFor(mode);
         const selected = entries.filter(entry => ids.includes(entry.id));
@@ -412,7 +415,7 @@ window.addEventListener('hashchange', joinFromUrl);
 window.addEventListener('offline', () => ui({ error: 'You are offline. Check your internet connection.' }));
 window.addEventListener('online', () => { if (store.state.session.roomId && rtc?.dataChannel?.readyState !== 'open') connectRoom(store.state.session.roomId); else ui({ error: '' }); });
 window.addEventListener('beforeunload', event => {
-    if (store.state.transfers.some(item => ['queued', 'sending', 'receiving'].includes(item.status))) { event.preventDefault(); event.returnValue = ''; }
+    if (activeTransfers() || activeSaves) { event.preventDefault(); event.returnValue = ''; }
 });
 window.addEventListener('pagehide', teardown);
 window.addEventListener('popstate', () => { const view = Object.entries(viewPaths).find(([, path]) => path === location.pathname)?.[0] || 'dashboard'; ui({ view }); joinFromUrl(); });
@@ -446,7 +449,7 @@ window.addEventListener('keydown', event => {
 
 let wakeLock = null, requestingWakeLock = false;
 async function keepAwake() {
-    if (!activeTransfers() || document.visibilityState !== 'visible') { await wakeLock?.release().catch(() => {}); wakeLock = null; return; }
+    if (!(activeTransfers() || activeSaves) || document.visibilityState !== 'visible') { await wakeLock?.release().catch(() => {}); wakeLock = null; return; }
     if (!wakeLock && !requestingWakeLock && navigator.wakeLock) {
         requestingWakeLock = true;
         try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
@@ -456,3 +459,14 @@ async function keepAwake() {
 }
 store.events.subscribe('stateChange', (_state, key) => { if (key === 'transfers') keepAwake(); });
 document.addEventListener('visibilitychange', keepAwake);
+
+prepareStreamDownloads();
+window.addEventListener('mystic-save-state', () => { store.state.vaultState = {...store.state.vaultState, saving:Boolean(activeSaves)}; keepAwake(); });
+
+let lastActivity = Date.now();
+for (const event of ['pointerdown', 'keydown']) document.addEventListener(event, () => { lastActivity = Date.now(); }, {passive:true});
+setInterval(() => {
+    if (db.protection && !db.locked && !activeTransfers() && !activeSaves && !store.state.vaultState.busy && Date.now() - lastActivity >= 10 * 60 * 1000) {
+        db.lock(); refreshVault().catch(report);
+    }
+}, 30000);

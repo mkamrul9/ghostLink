@@ -8,7 +8,7 @@ export default class WebRTCConnection {
         this.peerConnection.onicecandidate = ({ candidate }) => {
             if (candidate) { try { signal.send({ type: 'ICE_CANDIDATE', candidate }); } catch { /* connected peers can outlive signaling */ } }
         };
-        this.peerConnection.onconnectionstatechange = () => this.onConnectionStateChange?.(this.peerConnection.connectionState);
+        this.peerConnection.onconnectionstatechange = () => { if(!this.closed)this.onConnectionStateChange?.(this.peerConnection.connectionState); };
         this.peerConnection.ondatachannel = ({ channel }) => this.setupDataChannel(channel);
         if (isInitiator) this.setupDataChannel(this.peerConnection.createDataChannel('mystic-transfer', { ordered: true }));
     }
@@ -23,9 +23,9 @@ export default class WebRTCConnection {
         };
         channel.onopen = announce;
         if (channel.readyState === 'open') queueMicrotask(announce);
-        channel.onclose = () => { clearTimeout(helloTimer); this.onDataChannelClose?.(); };
+        channel.onclose = () => { clearTimeout(helloTimer); if(!this.closed)this.onDataChannelClose?.(); };
         this.clearHello = () => clearTimeout(helloTimer);
-        channel.onerror = () => this.onError?.(new Error('The peer connection encountered a network error.'));
+        channel.onerror = () => { if(!this.closed && this.peerConnection.connectionState === 'failed')this.onError?.(new Error('The peer connection encountered a network error.')); };
         // Preserve wire order through asynchronous key imports and IndexedDB writes.
         channel.onmessage = ({ data }) => {
             this.incoming = this.incoming.then(async () => {
@@ -71,5 +71,5 @@ export default class WebRTCConnection {
         if (this.peerConnection.remoteDescription) await this.peerConnection.addIceCandidate(candidate);
         else this.pendingCandidates.push(candidate);
     }
-    close() { this.clearHello?.(); this.dataChannel?.close(); this.peerConnection.close(); }
+    close() { this.closed = true; this.clearHello?.(); this.dataChannel?.close(); this.peerConnection.close(); }
 }

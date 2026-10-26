@@ -1,7 +1,9 @@
 export function safePath(input) {
+    if (typeof input !== 'string' || input.length > 4096) throw new Error('Use a valid file or folder path with at most 4096 characters.');
     const value = String(input).replaceAll('\\', '/');
     if (!value || value.startsWith('/') || /^[a-z]:/i.test(value)) throw new Error('Use a file or folder name, without a drive or leading slash.');
     const parts = value.split('/').filter(Boolean);
+    if (parts.length > 128) throw new Error('Use no more than 128 nested folders.');
     if (parts.some(part => part === '.' || part === '..' || /[\x00-\x1f]/.test(part))) throw new Error('This folder name is not allowed.');
     return parts.join('/');
 }

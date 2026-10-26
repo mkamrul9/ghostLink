@@ -10,7 +10,7 @@ import { digest, utf8, hex } from './LocalCrypto.js';
 export default class TransferManager {
     constructor(rtc, db, options = {}) {
         this.worker = new WorkerManager(); this.rtc = rtc; this.db = db; this.options = options;
-        this.receivers = new Map(); this.queued = new Map(); this.failures = new Map(); this.senders = new Map(); this.wireJobs = new Map(); this.waiters = new Map();
+        this.receivers = new Map(); this.pendingReceives = new Map(); this.queued = new Map(); this.failures = new Map(); this.senders = new Map(); this.wireJobs = new Map(); this.waiters = new Map();
         rtc.onControl = message => this.control(message); rtc.onPacket = packet => this.packet(packet); this.queue = Promise.resolve();
     }
     wait(key, signal, timeout = 30000) {
@@ -108,11 +108,12 @@ export default class TransferManager {
             if (job !== undefined) this.senders.get(job)?.abort();
             return;
         }
+        let admission;
         try {
             if (message.type === 'FILE_META') {
                 if (this.options.canReceive && !this.options.canReceive()) throw new Error('The other device is working on saved files. Try again shortly.');
                 this.db.requireUnlocked?.();
-                if (this.receivers.size >= 4 || this.receivers.has(id)) throw new Error('Wait for the current incoming files to finish.');
+                if (this.receivers.size + this.pendingReceives.size >= 4 || this.receivers.has(id) || this.pendingReceives.has(id)) throw new Error('Wait for the current incoming files to finish.');
                 const chunkSize = message.chunkSize || CHUNK_SIZE;
                 if (!Number.isSafeInteger(chunkSize) || ![16384, CHUNK_SIZE].includes(chunkSize) || !Number.isSafeInteger(message.fileSize) || message.fileSize < 0 || message.fileSize > (this.options.maxFileSize || Number.MAX_SAFE_INTEGER) || message.totalChunks !== Math.ceil(message.fileSize / chunkSize) || message.totalChunks > 0xffffffff) throw new Error('File exceeds the transfer size limit or has invalid metadata.');
                 if (message.kind === 'directory' && message.fileSize !== 0) throw new Error('Invalid empty folder.');
@@ -120,6 +121,8 @@ export default class TransferManager {
                 if (typeof message.fileName !== 'string' || !message.fileName.length || message.fileName.length > 255) throw new Error('Invalid file name.');
                 if (message.protocol >= 2 && (!/^[0-9a-f]{64}$/.test(message.resumeToken || '') || !/^[0-9a-f]{64}$/.test(message.identity || ''))) throw new Error('Invalid resume information.');
                 const relativePath = safePath(String(message.relativePath || message.fileName).slice(0, 4096));
+                admission = {cancelled:false}; this.pendingReceives.set(id, admission);
+                this.options.onAdd?.({id, name:message.fileName, relativePath, kind:message.kind, size:message.fileSize, direction:'receive', status:'receiving', progress:0, startedAt:Date.now()});
                 const raw = new Uint8Array(message.rawKey), keyId = await digest(raw);
                 const existing = await this.db.getMetadata(id);
                 let metadata;
@@ -133,8 +136,11 @@ export default class TransferManager {
                     metadata = { fileId: id, fileName: message.fileName.replace(/[\\/\x00-\x1f]/g, '_'), relativePath, fileSize: message.fileSize, mimeType: String(message.mimeType || 'application/octet-stream').slice(0, 120), totalChunks: message.totalChunks, chunkSize, cryptoKey: await importKeyFromRaw(raw), keyId, complete: false, nextChunk: 0, protocol: message.protocol || 1, resumeToken: message.resumeToken || null, identity: message.identity || null, kind: message.kind === 'directory' ? 'directory' : 'file', createdAt: Date.now() };
                     await this.db.saveMetadata(metadata);
                 }
+                if (admission.cancelled) throw new DOMException('Transfer paused.', 'AbortError');
                 const receiver = new FileReceiver(metadata, this.db, (progress, bytes, speed) => this.options.onProgress?.(id, { progress, bytes, speed }));
-                const prefixHash = await receiver.restore(); this.receivers.set(id, receiver);
+                const prefixHash = await receiver.restore();
+                if (admission.cancelled) throw new DOMException('Transfer paused.', 'AbortError');
+                this.receivers.set(id, receiver);
                 this.options.onAdd?.({ id, name: metadata.fileName, relativePath: metadata.relativePath, kind: metadata.kind, size: metadata.fileSize, progress: metadata.fileSize ? Math.round(receiver.bytes / metadata.fileSize * 100) : 0, status: 'receiving', direction: 'receive', resumedBytes: receiver.bytes, startedAt: Date.now() });
                 this.rtc.sendControl({ type: 'FILE_READY', fileId: id, nextChunk: receiver.count, prefixHash });
             } else if (message.type === 'FILE_END') {
@@ -144,6 +150,7 @@ export default class TransferManager {
                 this.rtc.sendControl({ type: 'FILE_COMPLETE', fileId: id, sha256: hash }); this.options.onReceived?.(id);
             }
         } catch (error) { await this.failReceive(id, error); }
+        finally { if (admission) this.pendingReceives.delete(id); }
     }
     async packet(packet) {
         let id;
@@ -157,10 +164,11 @@ export default class TransferManager {
     async failReceive(id, error) {
         this.receivers.delete(id);
         try { this.rtc.sendControl({ type: 'FILE_ERROR', fileId: id, code: error.code, message: error.message }); } catch { /* disconnected */ }
-        this.options.onProgress?.(id, { status: 'failed', error: error.message, speed: 0 }); this.options.onError?.(error); this.options.onVaultChange?.();
+        this.options.onProgress?.(id, { status: error.name === 'AbortError' ? 'cancelled' : 'failed', error: error.message, speed: 0 }); if(error.name !== 'AbortError')this.options.onError?.(error); this.options.onVaultChange?.();
     }
     cancel(id, notify = true) {
         if (this.queued.delete(id)) this.options.onProgress?.(id, { status: 'cancelled', speed: 0 });
+        const pending = this.pendingReceives.get(id); if(pending) { pending.cancelled = true; this.options.onProgress?.(id, {status:'cancelled',speed:0}); }
         this.senders.get(id)?.abort();
         let wire = id; for (const [wireId, jobId] of this.wireJobs) if (jobId === id) wire = wireId;
         if (this.receivers.delete(wire)) this.options.onProgress?.(wire, { status: 'cancelled', speed: 0 });
@@ -173,6 +181,6 @@ export default class TransferManager {
         for (const id of this.queued.keys()) this.options.onProgress?.(id, { status: 'interrupted', error: 'Reconnect and resume this file.', speed: 0 });
         this.queued.clear();
         for (const id of this.senders.keys()) this.failures.set(id, new Error('The other device disconnected. Reconnect to resume.'));
-        for (const id of [...this.senders.keys(), ...this.receivers.keys()]) this.cancel(id, false);
+        for (const id of [...this.senders.keys(), ...this.receivers.keys(), ...this.pendingReceives.keys()]) this.cancel(id, false);
     }
 }

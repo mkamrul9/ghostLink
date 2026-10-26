@@ -4,6 +4,24 @@ const LIMIT32 = 0xffffffff;
 export function archivePath(path) {
     return safePath(path).split('/').map(part => { let value = part.replace(/[<>:"|?*]/g, '_').replace(/[. ]+$/, '') || 'unnamed'; if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value)) value = '_' + value; return value; }).join('/');
 }
+export function archiveEntries(entries) {
+    const types = new Map(), explicit = new Set();
+    return entries.map(entry => {
+        if (!Number.isSafeInteger(entry.size) || entry.size < 0 || entry.directory && entry.size !== 0) throw new Error('Invalid file size.');
+        const path = archivePath(entry.path), key = path.toLowerCase();
+        if (explicit.has(key)) throw new Error('Two files have the same folder path. Rename one before downloading.');
+        explicit.add(key);
+        const parts = key.split('/');
+        for (let index = 1; index < parts.length; index++) {
+            const parent = parts.slice(0,index).join('/');
+            if (types.get(parent) === 'file') throw new Error('A file and folder use the same path. Rename or move the conflicting file before saving.');
+            types.set(parent,'directory');
+        }
+        const type = entry.directory ? 'directory' : 'file';
+        if (types.has(key) && types.get(key) !== type) throw new Error('A file and folder use the same path. Rename or move the conflicting file before saving.');
+        types.set(key,type); return {...entry,path};
+    });
+}
 function buffer(size) { const bytes = new Uint8Array(size); return [bytes, new DataView(bytes.buffer)]; }
 function u64(view, offset, value) { view.setBigUint64(offset, BigInt(value), true); }
 async function* entryChunks(entry) {
@@ -14,6 +32,7 @@ async function* entryChunks(entry) {
 }
 export async function* createZipStream(entries) {
     if (!entries.length) throw new Error('Choose files or folders first.');
+    entries = archiveEntries(entries);
     const centralRecords = [], names = new Set(); let offset = 0;
     for (const entry of entries) {
         if (!Number.isSafeInteger(entry.size) || entry.size < 0) throw new Error('Invalid file size.');

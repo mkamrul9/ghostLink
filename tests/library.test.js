@@ -45,6 +45,9 @@ test('folder ZIP downloads are readable by an independent reader with correct pa
     await assert.rejects(createZip([{ ...entries[0], path: '../escape.txt' }]), /not allowed/);
     await assert.rejects(createZip([entries[0], entries[0]]), /same folder path/);
     await assert.rejects(createZip([{ ...entries[0], size: 268435457 }]), /direct saving/);
+    await assert.rejects(createZip([{path:'Work',size:0,getBlob:async()=>new Blob()}, {path:'Work/file.txt',size:0,getBlob:async()=>new Blob()}]), /file and folder/);
+    await assert.rejects(createZip([{path:'Work/file.txt',size:0,getBlob:async()=>new Blob()}, {path:'Work',size:0,getBlob:async()=>new Blob()}]), /file and folder/);
+    await assert.rejects(createZip([{path:'a?.txt',size:0,getBlob:async()=>new Blob()}, {path:'a*.txt',size:0,getBlob:async()=>new Blob()}]), /same folder path/);
 });
 test('helper proposes only named or selected files and never acts on a negative or ambiguous command', () => {
     const files = [

@@ -1,6 +1,7 @@
 import { unpackEncryptedChunk } from '../utils/BinaryPacker.js';
 import { decryptChunk } from '../utils/CryptoVault.js';
-import { utf8, passwordKey, sealBytes, openBytes, serializeMetadata, deserializeMetadata } from '../utils/LocalCrypto.js';
+import { sha256 } from '../vendor/sha256.js';
+import { hex, utf8, passwordKey, sealBytes, openBytes, serializeMetadata, deserializeMetadata } from '../utils/LocalCrypto.js';
 const MEMORY_DOWNLOAD_LIMIT = 256 * 1024 * 1024;
 export default class DBManager {
     constructor() { this.dbName = 'GhostLinkVault'; this.db = null; this.protection = null; this.unlockKey = null; }
@@ -89,7 +90,7 @@ export default class DBManager {
     async *fileChunks(fileId) {
         const metadata = await this.getMetadata(fileId);
         if (!metadata?.complete) throw new Error('This file is incomplete. Ask the sender to resume it.');
-        let size = 0;
+        let size = 0; const hash = metadata.verified ? sha256.create() : null;
         for (let first = 0; first < metadata.totalChunks; first += 64) {
             const records = await this.getChunks(fileId, first, Math.min(64, metadata.totalChunks - first));
             for (let offset = 0; offset < records.length; offset++) {
@@ -97,10 +98,11 @@ export default class DBManager {
                 const packet = unpackEncryptedChunk(records[offset].data);
                 if (packet.fileId !== fileId || packet.chunkIndex !== first + offset) throw new Error('Saved file data is invalid.');
                 const buffer = await decryptChunk(metadata.cryptoKey, packet.iv, packet.encryptedPayload);
-                size += buffer.byteLength; yield new Uint8Array(buffer);
+                size += buffer.byteLength; const bytes = new Uint8Array(buffer); hash?.update(bytes); yield bytes;
             }
         }
         if (size !== metadata.fileSize) throw new Error('Saved file size does not match.');
+        if (hash && hex(hash.digest()) !== metadata.sha256) throw new Error('Saved file verification failed. Restore a backup or ask the sender to resend it.');
     }
     async getFileBlob(fileId, maxBytes = MEMORY_DOWNLOAD_LIMIT) {
         const metadata = await this.getMetadata(fileId);
