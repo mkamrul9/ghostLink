@@ -64,10 +64,11 @@ test('local history retains the newest 500 entries and loads recent entries in c
 });
 
 test('incoming admission is visible before asynchronous storage work and pending receives can be cancelled', async t => {
- const {manager,meta,db,added,changes,messages}=await fixture(t);let release;
- const original=db.getMetadata.bind(db);db.getMetadata=async id=>{await new Promise(resolve=>{release=resolve;});return original(id);};
+ const {manager,meta,db,added,changes,messages}=await fixture(t);let release,entered;
+ const gate=new Promise(resolve=>{release=resolve;}),waiting=new Promise(resolve=>{entered=resolve;});
+ const original=db.getMetadata.bind(db);db.getMetadata=async id=>{entered();await gate;return original(id);};
  const pending=manager.control(meta);
- for(let i=0;i<20 && !release;i++)await new Promise(resolve=>setImmediate(resolve));
+ await Promise.race([waiting,pending.then(()=>{throw new Error('Metadata admission ended before reaching storage.');})]);
  assert.equal(added.at(-1).status,'receiving');manager.cancel(meta.fileId);release();await pending;
  assert.equal(manager.receivers.size,0);assert.equal(manager.pendingReceives.size,0);assert.equal(changes.at(-1).status,'cancelled');assert.notEqual(messages.at(-1).type,'FILE_READY');
 });
