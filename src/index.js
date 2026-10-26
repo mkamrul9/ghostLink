@@ -152,6 +152,7 @@ function setupRtc(initiator, token) {
     return currentRtc;
 }
 async function connectRoom(input, automatic = false) {
+    let token;
     try {
         await ready;
         if (!window.isSecureContext || !crypto.subtle || !window.RTCPeerConnection) throw new Error('Use HTTPS and a browser with WebRTC support to transfer files.');
@@ -159,7 +160,7 @@ async function connectRoom(input, automatic = false) {
         const serverUrl = validateSignalUrl(store.state.ui.signalUrl);
         if (!automatic) reconnectAttempt = 0;
         teardown();
-        const token = generation;
+        token = generation;
         store.state.session = { roomId: room, role: 'idle', peers: 0 };
         writeRoomUrl(room);
         ui({ connectionStatus: 'connecting', dataChannelStatus: 'connecting', error: '' });
@@ -201,7 +202,7 @@ async function connectRoom(input, automatic = false) {
                 toast.show('The connection server disconnected. Your current peer session can continue.', 'warning');
                 return;
             }
-            ui({ connectionStatus: 'disconnected', error: 'The connection server disconnected. ReconnectingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' });
+            ui({ connectionStatus: 'disconnected', error: 'The connection server disconnected. ReconnectingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' });
             if (reconnectAttempt < 3) reconnectTimer = setTimeout(() => { reconnectAttempt++; connectRoom(room, true); }, Math.min(10000, 1000 * 2 ** reconnectAttempt) + Math.random() * 500);
             else ui({ error: 'Unable to reconnect. Check your network and try again.' });
         };
@@ -214,6 +215,9 @@ async function connectRoom(input, automatic = false) {
         const backlog = pending; pending = [];
         for (const message of backlog) await handle(message);
     } catch (error) {
+        if (token !== undefined && token !== generation) return;
+        if (token === undefined) { ui({ error: error.message }); report(error); return; }
+        signal?.close();
         ui({ connectionStatus: 'failed', dataChannelStatus: 'closed', error: error.message });
         report(error);
     }
@@ -232,7 +236,7 @@ async function vaultAction(action, id) {
             await refreshVault();
             toast.show('File deleted from this device.', 'success');
         } else {
-            toast.show('Preparing your downloadÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦', 'info');
+            toast.show('Preparing your downloadÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦', 'info');
             const { blob, name } = await db.getFileBlob(id);
             downloadBlob(blob, name);
         }
@@ -332,3 +336,9 @@ window.addEventListener('beforeunload', event => {
     if (store.state.transfers.some(item => ['queued', 'sending', 'receiving'].includes(item.status))) { event.preventDefault(); event.returnValue = ''; }
 });
 window.addEventListener('pagehide', () => { teardown(); clearInterval(graphTimer); graph.unmount(); });
+
+document.querySelector('.skip-link').addEventListener('click', event => {
+    event.preventDefault();
+    document.getElementById('main-content').focus();
+});
+window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });

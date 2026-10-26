@@ -37,6 +37,11 @@ try {
     await guest.goto(invite);
     await Promise.all([connected(host), connected(guest)]);
     console.log('PASS: invitation connects two isolated browser profiles');
+    await host.locator('#room-code').fill('bad');
+    await host.getByRole('button', { name: 'Join room', exact: true }).click();
+    await host.getByText('Paste a valid invite link or room code (8-64 characters).', { exact: true }).first().waitFor();
+    await connected(host);
+    console.log('PASS: invalid join does not interrupt an active session');
 
     const third = await device();
     await third.goto(invite);

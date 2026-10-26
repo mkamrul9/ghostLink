@@ -9,18 +9,18 @@ export default class DashboardShell extends Component {
             </header>
             <div class="app-body">
                 <aside class="app-sidebar">
-                    <section class="panel nav-panel"><span class="eyebrow">WORKSPACE</span><nav class="nav-list" aria-label="Workspace"><button class="nav-item is-active" data-view="dashboard"><span aria-hidden="true">◫</span> Overview</button><button class="nav-item" data-view="transfers"><span aria-hidden="true">⇄</span> Transfers</button><button class="nav-item" data-view="vault"><span aria-hidden="true">▣</span> Local vault</button><button class="nav-item" data-view="settings"><span aria-hidden="true">⚙</span> Preferences</button></nav></section>
+                    <section class="panel nav-panel"><span class="eyebrow">WORKSPACE</span><nav class="nav-list" aria-label="Workspace"><button class="nav-item is-active" data-view="dashboard"><span aria-hidden="true">â—«</span> Overview</button><button class="nav-item" data-view="transfers"><span aria-hidden="true">â‡„</span> Transfers</button><button class="nav-item" data-view="vault"><span aria-hidden="true">â–£</span> Local vault</button><button class="nav-item" data-view="settings"><span aria-hidden="true">âš™</span> Preferences</button></nav></section>
                     <section class="panel session-panel"><div class="panel-title">Connect devices <span class="step-label">01</span></div><div id="session-controls-slot"></div></section>
                     <section class="panel stats-panel"><div class="panel-title">Your session</div><div id="session-summary-slot"></div></section>
                     <section class="panel connections-panel"><div class="panel-title">Recent rooms</div><div id="connections-slot"></div></section>
                 </aside>
-                <main class="app-main" id="main-content">
+                <main class="app-main" id="main-content" tabindex="-1">
                     <div class="workspace-heading"><div><span class="eyebrow">LESS FRICTION. MORE FLOW.</span><h2 id="view-title">Your sharing space</h2></div><span class="workspace-badge">PEER TO PEER</span></div>
                     <section class="panel hero-panel view-panel" data-panel="dashboard"><div id="drop-zone-slot"></div></section>
                     <section class="panel queue-panel view-panel" data-panel="dashboard,transfers"><div class="panel-title">Transfer activity <span class="step-label">LIVE</span></div><div id="queue-slot"></div></section>
                     <section class="panel vault-panel view-panel" data-panel="vault" hidden><div class="panel-title">Local vault</div><div id="vault-slot"></div></section>
                     <section class="panel settings-panel view-panel" data-panel="settings" hidden><div class="panel-title">Preferences</div><div id="settings-slot"></div></section>
-                    <div class="workspace-footnote"><span aria-hidden="true">◇</span> Files move between devices. Your file contents never pass through our server.</div>
+                    <div class="workspace-footnote"><span aria-hidden="true">â—‡</span> Files move between devices. Your file contents never pass through our server.</div>
                 </main>
                 <aside class="app-right">
                     <section class="panel file-panel"><div class="panel-title">Selected files <span class="step-label">02</span></div><div id="file-tree-slot"></div></section>
