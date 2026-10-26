@@ -6,7 +6,7 @@ import { createApp } from '../server.js';
 const app = createApp({ iceServers: [] });
 await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${app.server.address().port}`;
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, channel: process.env.BROWSER_CHANNEL || undefined });
 const errors = [];
 const pageErrors = [];
 let contexts = [];

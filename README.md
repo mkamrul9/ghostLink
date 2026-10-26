@@ -42,7 +42,7 @@ npm run test:e2e
 npm run test:load
 ```
 
-`npm run verify` runs syntax/import checks, unit/integration tests and browser acceptance tests. The browser suite uses separate browser profiles and compares downloaded content with the source SHA-256. Screenshots are written to `test-results/`. GitHub Actions runs verification for pushes and pull requests.
+`npm run verify` runs syntax/import checks, unit/integration tests and browser acceptance tests. The browser suite uses separate browser profiles and compares downloaded content with the source SHA-256. Screenshots are written to `test-results/`. GitHub Actions runs verification for pushes and pull requests using Google Chrome already installed on the Ubuntu 24.04 runner. Locally, the suite uses Playwright Chromium by default; set `BROWSER_CHANNEL=chrome` to use an installed Google Chrome.
 
 The load script defaults to 1,000 local WebSocket clients in 500 rooms. Set `LOAD_CLIENTS` to an even number up to 10,000. This measures signaling only, with the server and clients in the same process; it does not demonstrate production concurrency, browser throughput, TURN capacity or availability on a hosting plan.
 
