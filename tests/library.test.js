@@ -67,6 +67,9 @@ test('helper proposes only named or selected files and never acts on a negative 
     assert.equal(assistantReply('send report.pdf', { files: [] }).action.type, 'choose');
     assert.match(assistantReply('send report.pdf', { ...context, connected: false }).text, /Connect/);
     assert.match(assistantReply('are you AI?', context).text, /not a general AI/);
+    assert.equal(assistantReply('How do I use a local folder?', context).action.view, 'settings');
+    assert.equal(assistantReply('Receive files on my D drive', context).action.view, 'settings');
+    assert.equal(assistantReply('Change my folder passphrase', context).action.view, 'settings');
 });
 test('human-readable room codes retain 80 random bits and accept lowercase input', () => {
     const codes = new Set(Array.from({ length: 1000 }, createRoomCode));
