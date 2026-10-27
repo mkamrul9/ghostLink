@@ -1,5 +1,7 @@
 # Deploy Mystic
 
+The public preview is **https://mystic-hgyb.onrender.com**, deployed from this repository’s `main` branch to a free Render Node service. The service uses same-origin WebSockets and managed HTTPS. TURN is not configured; some restrictive networks will need a relay. The app and deployment smoke test are verified with browser profiles on one computer; physical cross-network validation is still required.
+
 ## Free launch on Render
 
 Render supports Node web services and WebSockets on its free plan. The included `render.yaml` runs the client and signaling together, with managed HTTPS and no paid database.
@@ -66,3 +68,5 @@ The optional external-folder library is entirely client-side. Hosts do not mount
 ## PWA and room-message checks
 
 Serve the manifest, PNG icons, `/pwa-assets.js` and `/download-worker.js` from the same HTTPS origin. `/messages` must return the application shell. Check installation from Settings, a live message and reply, delivery counts, one file in each direction, and reopening saved content offline. See [PWA and messages](docs/pwa-and-messages.md). After client changes, regenerate `src/pwa-assets.js` before pushing. The normal Node deployment uses the tracked asset list without a frontend build step.
+
+For an owner-authorized live smoke test, run `node scripts/hosted-smoke.mjs https://your-site.example`. It creates a temporary private test room using synthetic files, verifies downloaded bytes and messages in both directions, and leaves the browsers’ test profiles and downloads in ignored workspace artifacts (on D: when the checkout is on D:). The browser devices run on the testing computer; still check physical phones across separate networks.

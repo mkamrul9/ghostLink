@@ -22,6 +22,7 @@ try{
  for(const [sender,receiver,text]of [[laptop,phone,'The files arrived.'],[phone,laptop,'Received and ready.']]){
   await view(sender,'Messages');await view(receiver,'Messages');await sender.getByLabel('Message',{exact:true}).fill(text);await sender.getByRole('button',{name:'Send message',exact:true}).click();await receiver.getByText(text,{exact:true}).waitFor();await sender.getByText('Delivered',{exact:true}).last().waitFor();
  }
+ for(const page of [laptop,phone])await page.evaluate(()=>{document.querySelector('.toast-container').replaceChildren();document.activeElement?.blur();window.scrollTo(0,0);});
  await laptop.screenshot({path:'test-results/mystic-hosted-desktop.png',fullPage:true});await phone.evaluate(()=>window.scrollTo(0,0));await phone.screenshot({path:'test-results/mystic-hosted-mobile.png',fullPage:true});
  assert.deepEqual(errors,[]);console.log('PASS: public-origin rooms and WebSockets, matching downloaded bytes in both directions, two-way messages with delivery receipts, desktop/phone browser layouts. Browsers ran on this computer; physical cross-network testing remains separate.');
 }finally{await browser.close();}

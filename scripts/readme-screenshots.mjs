@@ -15,5 +15,10 @@ try{
  const sender=await senderContext.newPage(),receiver=await receiverContext.newPage();await sender.goto(base);await sender.waitForFunction(()=>!document.querySelector('[data-action="create"]').disabled);await sender.getByRole('button',{name:'Create a room',exact:true}).click();await sender.locator('.status-waiting').waitFor();await receiver.goto(sender.url());await sender.locator('.status-connected').waitFor();
  await sender.locator('#folder-picker').setInputFiles(root);await sender.screenshot({path:'docs/images/mystic-desktop.png',fullPage:true});
  await sender.getByRole('button',{name:'Send 5 selected files',exact:true}).click();await sender.waitForFunction(()=>document.querySelectorAll('.status-complete').length===5);await receiver.locator('.nav-list').getByRole('button',{name:'Received files',exact:true}).click();await receiver.evaluate(()=>window.scrollTo(0,0));await receiver.screenshot({path:'docs/images/mystic-mobile.png',fullPage:true});
- console.log('Captured current desktop and mobile Mystic screens.');
+ for(const [from,to,text]of [[sender,receiver,'The project folder is ready.'],[receiver,sender,'Received. Thank you!']]){
+  for(const page of [from,to])await page.locator('.nav-list').getByRole('button',{name:'Messages',exact:true}).click();
+  await from.getByLabel('Message',{exact:true}).fill(text);await from.getByRole('button',{name:'Send message',exact:true}).click();await to.getByText(text,{exact:true}).waitFor();await from.getByText('Delivered',{exact:true}).last().waitFor();
+ }
+ for(const [page,kind]of [[sender,'desktop'],[receiver,'mobile']]){await page.evaluate(()=>{document.querySelector('.toast-container').replaceChildren();document.activeElement?.blur();window.scrollTo(0,0);});await page.screenshot({path:`docs/images/mystic-messages-${kind}.png`,fullPage:true});}
+ console.log('Captured current desktop and mobile file-sharing and room-message screens.');
 }finally{await browser.close();await app.close();}

@@ -15,6 +15,8 @@
 
 ![Mystic desktop workspace with a complete project folder ready to send](docs/images/mystic-desktop.png)
 
+**Use Mystic:** [mystic-hgyb.onrender.com](https://mystic-hgyb.onrender.com) · [Install and messaging guide](docs/pwa-and-messages.md). The free host can take about a minute to wake after inactivity.
+
 ## Features
 
 - **Complete folders.** Keep nested paths and empty folders, organize files before sending, and save received folders as ZIP64 archives or native folders where supported.
@@ -33,6 +35,13 @@
 <summary>See the mobile workspace</summary>
 <br>
 <img src="docs/images/mystic-mobile.png" alt="Mystic received folders on a phone" width="330">
+</details>
+
+<details>
+<summary>See room messages</summary>
+<br>
+<img src="docs/images/mystic-messages-desktop.png" alt="Mystic room conversation with delivery receipts" width="100%">
+<img src="docs/images/mystic-messages-mobile.png" alt="Mystic room messages on a phone" width="330">
 </details>
 
 ## Quick start
@@ -89,7 +98,7 @@ docker build -t mystic .
 docker run --rm -p 8080:8080 mystic
 ```
 
-For a Linux server with a domain and public IP, see [the HTTPS and relay stack](deploy/README.md). Keep secrets in the ignored deployment environment file. The project includes no production service or promised free relay capacity.
+For a Linux server with a domain and public IP, see [the HTTPS and relay stack](deploy/README.md). Keep secrets in the ignored deployment environment file. The public preview runs on free Render. No always-on uptime or free TURN relay capacity is promised.
 
 ## Contribute
 

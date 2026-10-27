@@ -41,7 +41,7 @@
   "bugs": {
     "url": "https://github.com/mkamrul9/mystic/issues"
   },
-  "homepage": "https://github.com/mkamrul9/mystic#readme",
+  "homepage": "https://mystic-hgyb.onrender.com",
   "dependencies": {
     "@noble/hashes": "^2.4.0",
     "ws": "^8.22.0"
