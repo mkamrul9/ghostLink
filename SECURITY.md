@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Use [GitHub private vulnerability reporting](https://github.com/mkamrul9/ghostLink/security/advisories/new). Do not report an exploitable vulnerability in a public issue or discussion.
+Use [GitHub private vulnerability reporting](https://github.com/mkamrul9/mystic/security/advisories/new). Do not report an exploitable vulnerability in a public issue or discussion.
 
 Include a clear description, affected revision/browser, minimal reproduction using synthetic data, the expected behavior and the observed impact. Do not send real private files, passphrases, active invitations or live relay credentials. If a credential has already leaked, revoke or rotate it separately.
 

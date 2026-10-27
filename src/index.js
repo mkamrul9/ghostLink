@@ -5,6 +5,8 @@ import DashboardShell from './components/ui/DashboardShell.js';
 import DropZone from './components/ui/DropZone.js';
 import FileTree from './components/ui/FileTree.js';
 import TransferQueue from './components/ui/TransferQueue.js';
+import Pwa from './utils/Pwa.js';
+import AppPanel, {installInstructions} from './components/ui/AppPanel.js';
 import ChatPanel from './components/ui/ChatPanel.js';
 import SessionControls from './components/ui/SessionControls.js';
 import SessionSummary from './components/ui/SessionSummary.js';
@@ -37,7 +39,7 @@ import { createRoomCode, normalizeRoomCode } from './utils/RoomCode.js';
 
 const store = new Store({ initialState: {
     files: [], fileSelection: [], receivedSelection: [], transfers: [], chat: [], peers: [], vault: [],
-    ui: { ...loadSettings(), view: ({ '/received': 'vault', '/transfers': 'transfers', '/help': 'help', '/settings': 'settings' })[location.pathname] || 'dashboard', chatOpen: false, assistantOpen: false, connectionStatus: 'idle', dataChannelStatus: 'closed', booting: true, error: '' },
+    ui: { ...loadSettings(), view: ({ '/received': 'vault', '/messages': 'messages', '/transfers': 'transfers', '/help': 'help', '/settings': 'settings' })[location.pathname] || 'dashboard', chatOpen: false, chatUnread: 0, offline:!navigator.onLine, assistantOpen: false, connectionStatus: 'idle', dataChannelStatus: 'closed', booting: true, error: '' },
     vaultState: { protected: false, locked: false, busy: false, persistent: false, storageKind: 'browser', folderName: '', needsFolder: false },
     session: { roomId: '', role: 'idle', peers: 0 }
 } });
@@ -136,10 +138,15 @@ const updateTransfer = (id, patch) => {
     store.state.transfers = trimTransferHistory(store.state.transfers.map(item => item.id === id ? (changed = { ...item, ...patch }) : item));
     if (changed && terminal) save(historyDb.saveTransfer(changed));
 };
+const unreadRooms=new Map();
 const addChat = message => {
-    store.state.chat = [...store.state.chat.slice(-199), message];
-    save(historyDb.saveChat(message));
+    store.state.chat = [...store.state.chat.filter(item=>item.id!==message.id).slice(-199), message];
+    const saved=save(historyDb.saveChat(message));
+    if(message.origin==='peer' && !((store.state.ui.chatOpen || store.state.ui.view==='messages') && document.visibilityState==='visible')){const room=message.roomId;unreadRooms.set(room,(unreadRooms.get(room)||0)+1);ui({chatUnread:unreadRooms.get(room)});}
+    return saved;
 };
+function markMessagesRead(){unreadRooms.delete(store.state.session.roomId);ui({chatUnread:0});}
+function updateChatDelivery(id,patch){let changed;store.state.chat=store.state.chat.map(item=>item.id===id?(changed={...item,...patch}):item);if(changed)save(historyDb.saveChat(changed));}
 function updatePeer(status) {
     const roomId = store.state.session.roomId;
     if (!roomId) return;
@@ -157,6 +164,7 @@ function teardown() {
     signal?.close();
     transfers = rtc = signal = null;
     store.state.session = { ...store.state.session, peers: 0, members: [], recipientIds: [] };
+    ui({chatUnread:0});
     ui({ dataChannelStatus: 'closed' });
 }
 function roomFromInput(value) {
@@ -191,7 +199,8 @@ function setupRoom(token) {
             ui({ connectionStatus: connected.length ? 'connected' : members.some(peer => !peer.failed) ? 'connecting' : members.length ? 'disconnected' : 'waiting', dataChannelStatus: connected.length ? 'open' : 'closed', error: !connected.length && members.some(peer => peer.failed) ? 'A device disconnected. Choose Try again to reconnect.' : '' });
             updatePeer(connected.length ? 'online' : 'offline');
         },
-        onChat: message => addChat({ id: crypto.randomUUID(), text: message.text, author: message.author, ts: Date.now(), origin: 'peer', roomId: store.state.session.roomId })
+        onChatDelivery: updateChatDelivery,
+        onChat: message => addChat({ id: `${store.state.session.roomId}:${message.id}`,  text: message.text, author: message.author, ts: Date.now(), origin: 'peer', roomId: store.state.session.roomId })
     });
     rtc = transfers = session;
     return session;
@@ -207,6 +216,7 @@ async function connectRoom(input, automatic = false) {
         teardown();
         token = generation;
         store.state.session = { roomId: room, role: 'idle', peers: 0 };
+        ui({chatUnread:unreadRooms.get(room)||0});
         writeRoomUrl(room);
         ui({ connectionStatus: 'connecting', dataChannelStatus: 'connecting', error: '' });
         const channel = new SignalingChannel(serverUrl);
@@ -245,10 +255,11 @@ async function connectRoom(input, automatic = false) {
         report(error);
     }
 }
-const viewPaths = { dashboard: '/', vault: '/received', transfers: '/transfers', help: '/help', settings: '/settings' };
+const viewPaths = { dashboard: '/', messages: '/messages', vault: '/received', transfers: '/transfers', help: '/help', settings: '/settings' };
 function changeView(view, target) {
     if (!viewPaths[view]) return;
-    ui({ view });
+    ui({ view,chatOpen:false });
+    if(view==='messages')markMessagesRead();
     const url = new URL(location.href); url.pathname = viewPaths[view];
     if (url.href !== location.href) history.pushState(null, '', url);
     requestAnimationFrame(() => {
@@ -351,7 +362,7 @@ async function libraryAction(mode, action, ids) {
         else if (action.startsWith('download')) await downloadReceived(ids, action === 'download-folder');
     } catch (error) { report(error); }
 }
-const shell = new DashboardShell({ store, onView: changeView, onChat: () => ui({ chatOpen: !store.state.ui.chatOpen, assistantOpen: false }), onTutorial: tutorial });
+const shell = new DashboardShell({ store, onView: changeView, onChat: () => {if(store.state.ui.view==='messages'){changeView('dashboard');return;}const chatOpen=!store.state.ui.chatOpen;ui({chatOpen,assistantOpen:false});if(chatOpen)markMessagesRead();}, onTutorial: tutorial });
 shell.mount(document.getElementById('app'));
 function mount(Component, slot, props = {}) { const component = new Component({ store, ...props }); component.mount(document.getElementById(slot)); return component; }
 mount(RoomMembers, 'recipients-slot', { onSelect: recipientIds => { for (const peer of store.state.session.members || []) { if (!peer.deviceId) continue; recipientIds.includes(peer.id) ? recipientDevices.add(peer.deviceId) : recipientDevices.delete(peer.deviceId); } store.state.session = { ...store.state.session, recipientIds }; } });
@@ -368,9 +379,12 @@ mount(TransferQueue, 'queue-slot', {
     }
 });
 mount(ChatPanel, 'chat-slot', { onSend: text => {
-    try { const message = { id: crypto.randomUUID(), text, ts: Date.now(), author: store.state.ui.username }; rtc.sendChat(message); addChat({ ...message, origin: 'self', roomId: store.state.session.roomId }); }
-    catch (error) { report(error); }
-} });
+    try { const message = { id: crypto.randomUUID(), text, ts: Date.now(), author: store.state.ui.username }; const delivery=rtc.sendChat(message); addChat({ ...message, ...delivery, origin: 'self', roomId: store.state.session.roomId }); return true; }
+    catch (error) { report(error);return false; }
+}, onConnect:()=>store.state.session.roomId?shareRoom():changeView('dashboard','room'), onCopy: async text=>{try{await navigator.clipboard.writeText(text);toast.show('Message copied.','success');}catch{report(new Error('Select the message text and copy it.'));}},
+    onExport:()=>downloadBlob(new Blob([JSON.stringify({app:'Mystic',roomId:store.state.session.roomId,messages:store.state.chat.filter(item=>item.roomId===store.state.session.roomId)},null,2)],{type:'application/json'}),'Mystic-room-messages.json'),
+    onClear:async()=>{const room=store.state.session.roomId;if(!await toast.confirm('Clear this room’s messages on this device? Other devices keep their copies.'))return;try{await historyDb.clearRoomChat(room);store.state.chat=store.state.chat.filter(item=>item.roomId!==room);markMessagesRead();}catch(error){report(error);}}
+});
 mount(SessionControls, 'session-controls-slot', {
     onCreate: createRoom, onJoin: connectRoom, onRetry: () => connectRoom(store.state.session.roomId), onShare: shareRoom,
     onCopy: async () => { try { await navigator.clipboard.writeText(inviteUrl(store.state.session.roomId)); toast.show('Invite link copied.', 'success'); } catch { report(new Error('Copy the invite from Share room.')); } },
@@ -388,6 +402,7 @@ mount(SessionSummary, 'session-summary-slot', {
     }
 });
 mount(ConnectionList, 'connections-slot', { onReconnect: connectRoom });
+mount(AppPanel,'app-slot',{onInstall:async()=>{try{if(!await pwa.install())installInstructions();}catch(error){report(error);}},onUpdate:async()=>{if(activeTransfers() || activeSaves || store.state.vaultState.busy)return toast.show('Finish transfers, downloads, and storage tasks before updating.','info');if(!await toast.confirm('Update Mystic and reload? Your room will disconnect. Saved files and messages will stay.'))return;if(activeTransfers() || activeSaves || store.state.vaultState.busy)return;if(!pwa.applyUpdate())toast.show('Mystic is up to date.','info');}});
 mount(SettingsPanel, 'settings-slot', { onSave: (name, serverUrl) => {
     try {
         const username = name.trim();
@@ -416,7 +431,7 @@ const ready = (async () => {
         db.init().then(async () => { const remembered=await db.rememberedLibrary();if(remembered){if(await remembered.handle.queryPermission({mode:'readwrite'})==='granted'){await db.attachLibrary(await LocalFolderLibrary.open(remembered.handle),false);localStorage.setItem('mystic_device_id',db.library.deviceId);}else store.state.vaultState={...store.state.vaultState,needsFolder:true};} await refreshVault(); store.state.vaultState = { ...store.state.vaultState, persistent: await navigator.storage?.persisted?.() || false }; }),
         historyDb.init().then(async () => {
             const [chat, savedTransfers, peers] = await Promise.all([historyDb.loadChat(200), historyDb.loadTransfers(200), historyDb.loadPeers()]);
-            store.state.chat = chat;
+            store.state.chat = chat.map(item=>item.delivery==='sent'?{...item,delivery:'unconfirmed'}:item);
             store.state.transfers = savedTransfers.map(item => ['queued', 'sending', 'receiving'].includes(item.status) ? { ...item, status: 'interrupted', speed: 0, error: 'The previous session ended. Select this file again to resend.' } : item);
             store.state.peers = peers.map(peer => ({ ...peer, status: 'offline' }));
         }),
@@ -424,7 +439,7 @@ const ready = (async () => {
     ]);
     if (results[0].status === 'rejected') toast.show(results[0].reason.message || 'Browser file storage is unavailable. Enable site storage to receive files.', 'warning', 10000);
     if (results[1].status === 'rejected') toast.show('Browser history is unavailable for this session.', 'warning');
-    if (results[2].status === 'rejected') toast.show('Server settings could not load. Using default connection settings.', 'warning');
+    if (results[2].status === 'rejected' && navigator.onLine) toast.show('Server settings could not load. Using default connection settings.', 'warning');
     ui({ booting: false });
 })();
 function joinFromUrl() {
@@ -433,8 +448,8 @@ function joinFromUrl() {
 }
 ready.then(joinFromUrl);
 window.addEventListener('hashchange', joinFromUrl);
-window.addEventListener('offline', () => ui({ error: 'You are offline. Check your internet connection.' }));
-window.addEventListener('online', () => { if (store.state.session.roomId && rtc?.dataChannel?.readyState !== 'open') connectRoom(store.state.session.roomId); else ui({ error: '' }); });
+window.addEventListener('offline', () => ui({ offline:true,error: 'You are offline. Check your internet connection.' }));
+window.addEventListener('online', () => { ui({offline:false});if (store.state.session.roomId && rtc?.dataChannel?.readyState !== 'open') connectRoom(store.state.session.roomId); else ui({ error: '' }); });
 window.addEventListener('beforeunload', event => {
     if (activeTransfers() || activeSaves) { event.preventDefault(); event.returnValue = ''; }
 });
@@ -461,7 +476,7 @@ window.addEventListener('keydown', event => {
     if (event.key !== 'Tab' || !compactOverlay() || document.querySelector('dialog[open]')) return;
     const panel = store.state.ui.assistantOpen ? document.getElementById('assistant-panel') : store.state.ui.chatOpen ? document.getElementById('message-drawer') : null;
     if (!panel) return;
-    const controls = [...panel.querySelectorAll('button:not(:disabled), input:not(:disabled), a[href]')].filter(node => node.getClientRects().length);
+    const controls = [...panel.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href]')].filter(node => node.getClientRects().length);
     const first = controls[0], last = controls.at(-1);
     if (!first) return;
     if (!panel.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); first.focus(); }
@@ -479,9 +494,10 @@ async function keepAwake() {
     }
 }
 store.events.subscribe('stateChange', (_state, key) => { if (key === 'transfers') keepAwake(); });
-document.addEventListener('visibilitychange', keepAwake);
+document.addEventListener('visibilitychange',()=>{keepAwake();if(document.visibilityState==='visible' && (store.state.ui.chatOpen || store.state.ui.view==='messages'))markMessagesRead();});
 
-prepareStreamDownloads();
+const pwa=new Pwa(patch=>ui(patch));
+prepareStreamDownloads().then(registration=>pwa.watch(registration));
 window.addEventListener('mystic-save-state', () => { store.state.vaultState = {...store.state.vaultState, saving:Boolean(activeSaves)}; keepAwake(); });
 
 let lastActivity = Date.now();

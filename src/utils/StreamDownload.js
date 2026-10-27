@@ -1,7 +1,7 @@
 let registration;
 export function prepareStreamDownloads() {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker || typeof TransformStream === 'undefined') return Promise.resolve(null);
-    return registration ||= navigator.serviceWorker.register('/download-worker.js', {scope:'/'}).then(async () => navigator.serviceWorker.ready).catch(() => null);
+    return registration ||= navigator.serviceWorker.register('/download-worker.js', {scope:'/',updateViaCache:'none'}).then(async () => navigator.serviceWorker.ready).catch(() => null);
 }
 export async function streamBrowserDownload({name, source}) {
     const registration = await prepareStreamDownloads();

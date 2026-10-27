@@ -17,6 +17,8 @@ flowchart LR
 
 - `server.js`: static app routes, security headers, client configuration, health, room membership and targeted signaling. It accepts no upload or cloud-storage endpoint.
 - `src/index.js`: application composition, user actions, settings and session lifecycle.
+- `src/utils/Pwa.js`, `src/pwa-assets.js`, `download-worker.js`: install state, public-shell caching, controlled updates and private local streaming downloads.
+- `src/components/ui/ChatPanel.js`, `src/utils/Messages.js`: room messaging, search, receipts and safe link rendering.
 - `src/utils/RoomSession.js`: one WebRTC connection per room peer, recipient selection routing and room events.
 - `src/utils/TransferManager.js`: per-file queue, protocol validation, crypto worker requests, durable chunk acknowledgements and resume credentials.
 - `src/utils/FileReceiver.js`: committed prefix recovery, ordered packet writes, checksum state and verified completion.
@@ -40,3 +42,5 @@ The receiver's storage mode is selected by the user. Switching locations during 
 `npm run verify` combines syntax/import checks, unit/integration tests and browser acceptance suites. `tests/browser-runtime.js` keeps browser profiles and downloads in the ignored workspace directory. README screenshots are generated from synthetic fixture files, not users' content.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) before changing storage, protocol or browser capability handling.
+
+Room messages use a second ordered WebRTC channel, with receipt acknowledgements bound to the original room peer. File storage writes do not block its message queue. Neither messages nor file payloads travel through signaling. See [PWA and messaging](pwa-and-messages.md).

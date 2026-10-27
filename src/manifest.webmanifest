@@ -1,1 +1,36 @@
-{"name":"Mystic","short_name":"Mystic","description":"Private, direct file sharing between devices.","start_url":"/","display":"standalone","background_color":"#17191d","theme_color":"#17191d","icons":[{"src":"/assets/mystic-mark.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+{
+  "id": "/",
+  "name": "Mystic",
+  "short_name": "Mystic",
+  "description": "Private files, folders, and room messages between your devices.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#17191d",
+  "theme_color": "#17191d",
+  "lang": "en",
+  "categories": [
+    "utilities",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "/assets/mystic-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/mystic-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/mystic-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

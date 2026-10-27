@@ -48,7 +48,7 @@ The image runs as a non-root user and has a `/healthz` health check. Put it behi
 - Keep this version on one signaling instance. Multiple instances need shared room routing and peer-disconnect coordination before horizontal scaling.
 - Set monitoring on `/healthz`, restarts and connection failures. Do not log SDP, room codes, file names, chat or file keys. This implementation logs only its listening port.
 - Use an always-on hosting tier for a public service with uptime expectations. Establish privacy/support policies and a browser/device compatibility matrix.
-- Test mobile storage limits, native saving, browser-owned download streams and the 256 MiB fallback used when streaming is unavailable. Downloads need Mystic open until finished. The service worker only generates local download responses; it stores and uploads no file contents. Supported desktop browsers can stream larger downloads. Received files and protected keys live only in each browser profile; users can save encrypted backups locally.
+- Test mobile storage limits, native saving, browser-owned download streams and the 256 MiB fallback used when streaming is unavailable. Downloads need Mystic open until finished. The service worker caches an allowlist of public application assets and generates local download responses; it never caches messages, file contents, signaling, or API credentials. Supported desktop browsers can stream larger downloads. Received files and protected keys live only in each browser profile; users can save encrypted backups locally.
 
 ## Rollback
 
@@ -62,3 +62,7 @@ For the Linux HTTPS/coturn template, see [deploy/README.md](deploy/README.md). I
 Run `npm run check:deployment -- https://your-site.example --require-relay` to check HTTP health, security headers, public client settings and required assets. This confirms a relay is configured, not that a TURN allocation or real cross-network transfer succeeds.
 
 The optional external-folder library is entirely client-side. Hosts do not mount users' libraries or store their keys. A user can select a drive such as D: in desktop Chrome or Edge; normal browser-only copies remain subject to the browser profile's storage location and quota.
+
+## PWA and room-message checks
+
+Serve the manifest, PNG icons, `/pwa-assets.js` and `/download-worker.js` from the same HTTPS origin. `/messages` must return the application shell. Check installation from Settings, a live message and reply, delivery counts, one file in each direction, and reopening saved content offline. See [PWA and messages](docs/pwa-and-messages.md). After client changes, regenerate `src/pwa-assets.js` before pushing. The normal Node deployment uses the tracked asset list without a frontend build step.

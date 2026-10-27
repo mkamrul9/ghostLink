@@ -67,8 +67,8 @@ try {
     await view(host, 'Settings');
     await host.getByLabel('Your name', { exact: true }).fill('Morgan <Studio>');
     await host.getByRole('button', { name: 'Save settings', exact: true }).click();
-    await host.getByRole('button', { name: 'Messages', exact: true }).click();
-    await guest.getByRole('button', { name: 'Messages', exact: true }).click();
+    await host.locator('.header-chat').click();
+    await guest.locator('.header-chat').click();
     await guest.getByLabel('Message', { exact: true }).fill('keep this draft');
     const message = '<img src=x onerror="window.__xss=1"> Hello';
     await host.getByLabel('Message', { exact: true }).fill(message);

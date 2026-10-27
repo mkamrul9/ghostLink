@@ -24,6 +24,7 @@ Use a descriptive branch name. Keep changes focused; avoid mixing formatting, un
 ## Before opening a pull request
 
 ```sh
+npm run build:pwa
 npm run check
 npm test
 npx playwright install chromium
@@ -40,6 +41,8 @@ Useful scripts:
 - `npm run test:local-folder`: folder permissions, encrypted disk storage and database-loss recovery.
 - `npm run test:group`: explicit recipients, group sharing and large selections.
 - `npm run test:large`: real large transfer and streaming export.
+- `npm run test:messages`: real multi-peer notes, receipts, search, local history and mobile conversation layout.
+- `npm run test:pwa`: offline shell, local downloads, install metadata and waiting-worker updates.
 - `npm run test:mobile`: six viewport sizes and reduced keyboard space.
 - `npm run docs:screenshots`: regenerate README screenshots from sample files.
 

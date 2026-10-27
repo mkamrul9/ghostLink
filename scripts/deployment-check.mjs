@@ -15,7 +15,7 @@ export async function inspectDeployment(base,{allowHttp=false,requireRelay=false
         checks.push({id:'configuration',ok:response.ok&&valid,detail:'Public client settings are valid'});
         const relay=config.iceServers?.some(server=>(Array.isArray(server.urls)?server.urls:[server.urls]).some(value=>/^turns?:/.test(value||'')));
         checks.push({id:'relay',ok:!requireRelay||Boolean(relay),detail:relay?'Relay is configured; cross-network transfer still needs testing':requireRelay?'A relay is required but not configured':'Direct-only configuration; relay was not required for this check'});
-        for(const path of ['/index.js','/utils/LocalFolderLibrary.js','/download-worker.js']){const asset=await request(path);checks.push({id:path,ok:asset.ok&&/javascript/.test(asset.headers.get('content-type')||''),detail:'Client module is available'});}
+        for(const path of ['/index.js','/utils/LocalFolderLibrary.js','/utils/Pwa.js','/components/ui/ChatPanel.js','/manifest.webmanifest','/pwa-assets.js','/assets/mystic-192.png','/assets/mystic-512.png','/download-worker.js']){const asset=await request(path);checks.push({id:path,ok:asset.ok&&(asset.headers.get('content-type')||'').includes(path.endsWith('.png')?'image/png':path.endsWith('.webmanifest')?'application/manifest+json':'javascript'),detail:'Client asset is available'});}
         for(const path of ['/.env','/.git/config','/server.js']){const hidden=await request(path);checks.push({id:path,ok:hidden.status===404,detail:'Private server resource is not served'});}
     }catch(error){checks.push({id:'request',ok:false,detail:`Deployment request failed (${error.name || 'Error'})`});}
     return checks;

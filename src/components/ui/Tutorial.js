@@ -1,5 +1,10 @@
 import { icon } from '../../utils/icons.js';
 const tours = {
+    messages: [
+        {title:'Connect your devices',text:'Create a room and share its invite. Keep Mystic open on each device.',icon:'share',preview:'Share room',target:'room',view:'dashboard'},
+        {title:'Open Messages',text:'Choose Messages in the main menu. Notes and links go to everyone connected to this room.',icon:'chat',preview:'Messages',view:'messages'},
+        {title:'Send and keep a copy',text:'Write your message and press Send. Delivered confirms arrival at the other app. Search or save room messages on this device when you need them later.',icon:'check',preview:'Delivered',view:'messages'}
+    ],
     send: [
         { title: 'Create a room', text: 'Choose Create a room. A room connects your two devices.', icon: 'plus', preview: 'Create a room', target: 'room', view: 'dashboard' },
         { title: 'Invite the other device', text: 'Choose Share room or Copy invite link. Open the invite on the other device and wait for Device connected.', icon: 'share', preview: 'Share room', target: 'room', view: 'dashboard' },

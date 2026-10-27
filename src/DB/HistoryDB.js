@@ -28,6 +28,14 @@ export default class HistoryDB {
             tx.onerror = tx.onabort = () => reject(tx.error);
         });
     }
+    clearRoomChat(roomId) {
+        return new Promise((resolve,reject)=>{
+            if(!this.db)return reject(new Error('History is unavailable.'));
+            const tx=this.db.transaction('chat','readwrite'), cursor=tx.objectStore('chat').openCursor();
+            cursor.onsuccess=()=>{const item=cursor.result;if(item){if(item.value.roomId===roomId)item.delete();item.continue();}};
+            tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error);
+        });
+    }
     saveChat(value) { return this._put('chat', value); }
     saveTransfer(value) { return this._put('transfers', value); }
     savePeer(value) { return this._put('peers', value); }

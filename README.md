@@ -3,7 +3,7 @@
 <p align="center"><img src="docs/images/mystic-banner.svg" alt="Mystic: send complete folders. Private, resumable, verified." width="100%"></p>
 
 <p align="center">
-  <a href="https://github.com/mkamrul9/ghostLink/actions/workflows/ci.yml"><img src="https://github.com/mkamrul9/ghostLink/actions/workflows/ci.yml/badge.svg" alt="Continuous integration"></a>
+  <a href="https://github.com/mkamrul9/mystic/actions/workflows/ci.yml"><img src="https://github.com/mkamrul9/mystic/actions/workflows/ci.yml/badge.svg" alt="Continuous integration"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-ISC-orange.svg" alt="ISC license"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-43853d.svg" alt="Node.js 22 or later"></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-ff9b59.svg" alt="Contributions welcome"></a>
@@ -23,6 +23,8 @@
 - **An encrypted local library.** On supported desktop browsers, receive directly into a folder you choose, outside browser-managed storage. Reopen that folder with its passphrase after clearing website data.
 - **Private group rooms.** Up to six devices by default. Choose who receives your files; new arrivals stay unselected. Share room invites through your device, a messenger, email, or a copied code.
 - **Large streaming downloads.** Native disk writers and browser-owned download streams avoid loading the whole file into memory on supported browsers.
+- **Room messaging.** A dedicated page for notes and links, multiline text, delivery receipts, unread counts, search, local export, and clearing. Messages use a separate peer channel alongside files.
+- **Installable PWA.** Add Mystic to your home screen or desktop. Reopen saved files, local room history, and help offline. Transfers and live chat still need both devices connected.
 - **Useful local tools.** Search, sort, rename, move, bulk selection, private room messages, encrypted portable backups, and separate history clearing.
 - **Help without a subscription.** Pip, the courier-bird helper, explains the app and prepares commands such as `send report.pdf`. You review the files before sending. It runs locally without an AI service or API key.
 - **A responsive workspace.** Phone, tablet, desktop, keyboard navigation, reduced motion, and touch-friendly controls.
@@ -38,13 +40,15 @@
 Install [Node.js 22 or later](https://nodejs.org/), then:
 
 ```sh
-git clone https://github.com/mkamrul9/ghostLink.git
-cd ghostLink
+git clone https://github.com/mkamrul9/mystic.git
+cd mystic
 npm ci
 npm start
 ```
 
 Open **http://localhost:8080**. Create a room in one browser profile, join from another, and send a sample file. `localhost` links work only on the same computer. Use HTTPS to share with another device.
+
+For installation, open **Settings > Install Mystic**. See [the PWA and messaging guide](docs/pwa-and-messages.md).
 
 For development, use `npm run dev`. There is no frontend build step for normal operation.
 
@@ -92,8 +96,8 @@ For a Linux server with a domain and public IP, see [the HTTPS and relay stack](
 Contributions are welcome: code, browser testing, accessibility, documentation, and reproducible bug reports all help.
 
 - Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [architecture guide](docs/architecture.md).
-- Browse [good first issues](https://github.com/mkamrul9/ghostLink/labels/good%20first%20issue) or [help wanted](https://github.com/mkamrul9/ghostLink/labels/help%20wanted).
-- [Report a bug](https://github.com/mkamrul9/ghostLink/issues/new/choose), [suggest a feature](https://github.com/mkamrul9/ghostLink/issues/new/choose), or ask in [Discussions](https://github.com/mkamrul9/ghostLink/discussions).
+- Browse [good first issues](https://github.com/mkamrul9/mystic/labels/good%20first%20issue) or [help wanted](https://github.com/mkamrul9/mystic/labels/help%20wanted).
+- [Report a bug](https://github.com/mkamrul9/mystic/issues/new/choose), [suggest a feature](https://github.com/mkamrul9/mystic/issues/new/choose), or ask in [Discussions](https://github.com/mkamrul9/mystic/discussions).
 - Please follow the [code of conduct](CODE_OF_CONDUCT.md).
 
 Small, focused pull requests are easiest to review. There is no contributor agreement to sign. Contributions use the existing ISC project license.
@@ -108,7 +112,7 @@ npm run verify
 
 Verification includes protocol/storage tests, two-device sharing, encrypted backup recovery, local-folder recovery, four-device rooms, 750-file staging, a real 280 MiB transfer and streaming exports, and six responsive layouts. These are automated tests, not a claim of physical iOS/Android or hosted production-capacity testing. `npm run test:load` measures local signaling only.
 
-Browser artifacts stay in ignored `test-results/`. Run `npm run docs:screenshots` to regenerate the sample screenshots. After changing the hash dependency, run `npm run build:crypto` and commit the generated bundle and license.
+Browser artifacts stay in ignored `test-results/`. Run `npm run docs:screenshots` to regenerate the sample screenshots. After changing any `src/` files, run `npm run build:pwa` and commit the generated cache manifest. CI checks that it matches. After changing the hash dependency, run `npm run build:crypto` and commit the generated bundle and license.
 
 ## Direction
 

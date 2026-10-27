@@ -89,7 +89,7 @@ try {
         }
         await page.getByRole('button', { name: 'Close helper' }).tap();
         assert.equal(await page.locator('.app-body').evaluate(node => node.inert), false);
-        await page.getByRole('button', { name: 'Messages', exact: true }).tap();
+        await page.locator('.header-chat').tap();
         const messages = page.getByRole('dialog', { name: 'Messages', exact: true });
         await inside(page, messages); await inside(page, messages.locator('form'));
         await page.getByRole('button', { name: 'Close messages' }).tap();

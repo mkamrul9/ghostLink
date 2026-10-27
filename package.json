@@ -6,11 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "check": "node scripts/check.mjs",
+    "check": "node scripts/check.mjs && node scripts/build-pwa.mjs --check",
     "test": "node --test tests/*.test.js",
     "test:e2e": "node tests/browser.e2e.js",
     "test:load": "node scripts/load-test.mjs",
-    "verify": "npm run check && npm test && npm run test:e2e && npm run test:recovery && npm run test:local-folder && npm run test:group && npm run test:large && npm run test:mobile",
+    "verify": "npm run check && npm test && npm run test:e2e && npm run test:recovery && npm run test:local-folder && npm run test:group && npm run test:large && npm run test:mobile && npm run test:messages && npm run test:pwa",
     "test:mobile": "node tests/mobile.e2e.js",
     "build:crypto": "node scripts/build-crypto.mjs",
     "test:recovery": "node tests/recovery.e2e.js",
@@ -18,11 +18,14 @@
     "test:large": "node tests/large.e2e.js",
     "test:local-folder": "node tests/local-folder.e2e.js",
     "docs:screenshots": "node scripts/readme-screenshots.mjs",
-    "check:deployment": "node scripts/deployment-check.mjs"
+    "check:deployment": "node scripts/deployment-check.mjs",
+    "build:pwa": "node scripts/build-pwa.mjs",
+    "test:messages": "node tests/messages.e2e.js",
+    "test:pwa": "node tests/pwa.e2e.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mkamrul9/ghostLink.git"
+    "url": "git+https://github.com/mkamrul9/mystic.git"
   },
   "keywords": [
     "file-sharing",
@@ -36,9 +39,9 @@
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/mkamrul9/ghostLink/issues"
+    "url": "https://github.com/mkamrul9/mystic/issues"
   },
-  "homepage": "https://github.com/mkamrul9/ghostLink#readme",
+  "homepage": "https://github.com/mkamrul9/mystic#readme",
   "dependencies": {
     "@noble/hashes": "^2.4.0",
     "ws": "^8.22.0"

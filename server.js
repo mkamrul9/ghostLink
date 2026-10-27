@@ -7,7 +7,7 @@ import path from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 
 const publicRoot = fileURLToPath(new URL('./src/', import.meta.url));
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 const defaultIceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 export function createApp(options = {}) {
@@ -45,7 +45,7 @@ export function createApp(options = {}) {
             }
             let requested = decodeURIComponent(url.pathname);
             if (requested.startsWith('/src/')) requested = requested.slice(4);
-            if (['/', '/received', '/transfers', '/help', '/settings'].includes(requested)) requested = '/index.html';
+            if (['/', '/received', '/messages', '/transfers', '/help', '/settings'].includes(requested)) requested = '/index.html';
             if (requested.includes('\\') || requested.includes('\0') || requested.split('/').some(part => part.startsWith('.'))) return respond(404, '{"error":"Not found"}');
             const target = path.resolve(publicRoot, `.${requested}`);
             const type = types[path.extname(target)];

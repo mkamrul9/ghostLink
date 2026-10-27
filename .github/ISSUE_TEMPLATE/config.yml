@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/mkamrul9/ghostLink/security/advisories/new
+    url: https://github.com/mkamrul9/mystic/security/advisories/new
     about: Report vulnerabilities privately. Do not open a public issue.
   - name: Questions and ideas
-    url: https://github.com/mkamrul9/ghostLink/discussions
+    url: https://github.com/mkamrul9/mystic/discussions
     about: Ask for help or discuss an idea before starting a large change.

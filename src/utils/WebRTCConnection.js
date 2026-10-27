@@ -5,12 +5,17 @@ export default class WebRTCConnection {
         this.pendingCandidates = [];
         this.peerConnection = new RTCPeerConnection({ iceServers });
         this.incoming = Promise.resolve();
+        this.chatIncoming = Promise.resolve();
+        this.receivedChat = new Set();
         this.peerConnection.onicecandidate = ({ candidate }) => {
             if (candidate) { try { signal.send({ type: 'ICE_CANDIDATE', candidate }); } catch { /* connected peers can outlive signaling */ } }
         };
         this.peerConnection.onconnectionstatechange = () => { if(!this.closed)this.onConnectionStateChange?.(this.peerConnection.connectionState); };
-        this.peerConnection.ondatachannel = ({ channel }) => this.setupDataChannel(channel);
-        if (isInitiator) this.setupDataChannel(this.peerConnection.createDataChannel('mystic-transfer', { ordered: true }));
+        this.peerConnection.ondatachannel = ({ channel }) => channel.label === 'mystic-messages' ? this.setupChatChannel(channel) : this.setupDataChannel(channel);
+        if (isInitiator) {
+            this.setupDataChannel(this.peerConnection.createDataChannel('mystic-transfer', { ordered: true }));
+            this.setupChatChannel(this.peerConnection.createDataChannel('mystic-messages', { ordered: true }));
+        }
     }
     setupDataChannel(channel) {
         this.dataChannel = channel;
@@ -40,7 +45,9 @@ export default class WebRTCConnection {
                         if (!this.helloReceived) { this.helloReceived = true; this.onDataChannelOpen?.(); }
                     } else if (message.type === 'PROFILE') { this.remoteName = String(message.name || 'Device').slice(0,40); this.onProfile?.();
                     } else if (message.type === 'CHAT') {
-                        if (typeof message.text === 'string' && message.text.length <= 500) this.onChatMessage?.(message);
+                        await this.receiveChat(message);
+                    } else if (message.type === 'CHAT_ACK') {
+                        this.receiveChatAck(message);
                     } else await this.onControl?.(message);
                 } else await this.onPacket?.(data);
             }).catch(error => this.onError?.(error));
@@ -50,7 +57,37 @@ export default class WebRTCConnection {
         if (this.dataChannel?.readyState !== 'open') throw new Error('Connect to a peer first.');
         this.dataChannel.send(JSON.stringify(message));
     }
-    sendChat(message) { this.sendControl({ ...message, type: 'CHAT' }); }
+    setupChatChannel(channel) {
+        this.chatChannel = channel;
+        // Messages have their own ordered queue, independent of file writes.
+        channel.onmessage = ({data}) => {
+            this.chatIncoming = this.chatIncoming.then(async () => {
+                if (typeof data !== 'string' || data.length > 24000) return;
+                const message = JSON.parse(data);
+                if (message.type === 'CHAT') await this.receiveChat(message);
+                else if (message.type === 'CHAT_ACK') this.receiveChatAck(message);
+            }).catch(error => this.onError?.(error));
+        };
+    }
+    async receiveChat(message) {
+        if (!this.helloReceived || typeof message.text !== 'string' || !message.text.trim() || message.text.length > 4000 || !/^[0-9a-f-]{36}$/i.test(message.id || '')) return;
+        if (!this.receivedChat.has(message.id)) {
+            await this.onChatMessage?.({id:message.id, text:message.text, author:this.remoteName});
+            this.receivedChat.add(message.id);
+            if (this.receivedChat.size > 500) this.receivedChat.delete(this.receivedChat.values().next().value);
+        }
+        this.sendChatControl({type:'CHAT_ACK', id:message.id});
+    }
+    receiveChatAck(message) {
+        if (this.helloReceived && /^[0-9a-f-]{36}$/i.test(message.id || '')) this.onChatAck?.(message.id);
+    }
+    sendChatControl(message) {
+        const channel = this.chatChannel?.readyState === 'open' ? this.chatChannel : this.dataChannel;
+        if (channel?.readyState !== 'open') throw new Error('Connect another device first.');
+        if (channel.bufferedAmount > 262144) throw new Error('Messages are busy. Try again in a moment.');
+        channel.send(JSON.stringify(message));
+    }
+    sendChat(message) { this.sendChatControl({ id:message.id, text:message.text, type:'CHAT' }); }
     async createOffer() {
         if (this.peerConnection.signalingState !== 'stable') return;
         await this.peerConnection.setLocalDescription(await this.peerConnection.createOffer());
@@ -71,5 +108,5 @@ export default class WebRTCConnection {
         if (this.peerConnection.remoteDescription) await this.peerConnection.addIceCandidate(candidate);
         else this.pendingCandidates.push(candidate);
     }
-    close() { this.closed = true; this.clearHello?.(); this.dataChannel?.close(); this.peerConnection.close(); }
+    close() { this.closed = true; this.clearHello?.(); this.dataChannel?.close(); this.chatChannel?.close(); this.peerConnection.close(); }
 }

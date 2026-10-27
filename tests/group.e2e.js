@@ -21,7 +21,7 @@ try{
  await alice.locator('#file-picker').setInputFiles({name:'shared.bin',mimeType:'application/octet-stream',buffer:bytes});await alice.getByRole('button',{name:'Send 1 selected file',exact:true}).click();await complete(alice,2);
  for(const page of [bob,cara]){const files=await saved(page);assert.equal(files.length,1);assert.equal(files[0].sha256,expected);assert.equal(files[0].complete,true);}assert.equal((await saved(dana)).length,0);
  // Group messages go over each channel and retain the sender's chosen display name.
- for(const page of [alice,bob,cara,dana])await page.getByRole('button',{name:'Messages',exact:true}).click();
+ for(const page of [alice,bob,cara,dana])await page.locator('.header-chat').click();
  await alice.getByLabel('Message',{exact:true}).fill('Ready for review');await alice.getByRole('button',{name:'Send message',exact:true}).click();
  for(const page of [bob,cara,dana])await page.getByText('Ready for review',{exact:true}).waitFor();
  for(const page of [alice,bob,cara,dana])await page.getByRole('button',{name:'Close messages',exact:true}).click();
